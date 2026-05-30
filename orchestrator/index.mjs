@@ -23,6 +23,7 @@ import { createPoller } from './poller.mjs';
 import { guardConcurrent } from './in-flight.mjs';
 import { createTokenStore } from './auth/token-store.mjs';
 import { createGitHubOAuth } from './auth/github-oauth.mjs';
+import { createApi } from './api.mjs';
 
 const REPO_ROOT = path.join(import.meta.dirname, '..');
 const DEFAULT_PROMPTS = path.join(REPO_ROOT, 'specs', 'devtool-loop', 'prompts');
@@ -72,8 +73,9 @@ async function main() {
   const poller = createPoller({ box, onCard });
   poller.start(30_000);
 
+  const api = createApi({ box, tokenStore });
   const port = Number(process.env.PORT ?? 8080);
-  createWebhookServer({ config, onEvent: onCard, githubOAuth }).listen(port, () =>
+  createWebhookServer({ config, onEvent: onCard, githubOAuth, api }).listen(port, () =>
     console.log(`[orchestrator] webhook server on :${port}, poller every 30s, stub=${config.stubExternals}`));
 }
 
