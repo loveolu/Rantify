@@ -8,6 +8,7 @@
     "node": ">=20.11"
   },
   "scripts": {
+    "dev": "./run.sh",
     "test": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs idea-miner/__tests__/*.test.mjs integration/*.test.mjs",
     "test:orchestrator": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs idea-miner/__tests__/*.test.mjs integration/*.test.mjs",
     "verify:mock": "node contracts/verify-mock.mjs",
