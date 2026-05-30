@@ -1,0 +1,15 @@
+{
+  "name": "idea-miner",
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "test": "node --test idea-miner/__tests__/**/*.test.mjs",
+    "test:run": "node --test --test-reporter=spec idea-miner/__tests__/**/*.test.mjs"
+  },
+  "devDependencies": {
+    "fast-check": "3.22.0"
+  }
+}
