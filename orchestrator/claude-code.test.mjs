@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 import { createClaudeCode } from './claude-code.mjs';
 
 function fakeRun(result = { code: 0, stdout: '', stderr: '' }) {
@@ -9,9 +12,9 @@ function fakeRun(result = { code: 0, stdout: '', stderr: '' }) {
   return fn;
 }
 
-test('builds the SPEC §9.3 invocation with all required flags', async () => {
+test('builds the SPEC §9.3 invocation with all required flags (fallback mode)', async () => {
   const run = fakeRun();
-  const cc = createClaudeCode({ run, apiKey: 'sk-ant-x' });
+  const cc = createClaudeCode({ run });
   await cc.runSession('/tmp/repo', { sessionId: 'card-1-phase1', promptFile: 'prompts/scaffold.md' });
   const { cmd, args } = run.calls[0];
   assert.equal(cmd, 'claude');
@@ -22,23 +25,66 @@ test('builds the SPEC §9.3 invocation with all required flags', async () => {
   assert.match(joined, /--no-interactive/);
 });
 
-test('passes ANTHROPIC_API_KEY in the child env', async () => {
-  const run = fakeRun();
-  await createClaudeCode({ run, apiKey: 'sk-ant-x' }).runSession('/r', { sessionId: 's', promptFile: 'p' });
-  assert.equal(run.calls[0].opts.env.ANTHROPIC_API_KEY, 'sk-ant-x');
-});
-
-test('returns the raw run result without throwing on non-zero exit (SPEC §9.3)', async () => {
+test('returns the raw run result without throwing on non-zero exit (fallback mode)', async () => {
   const run = fakeRun({ code: 1, stdout: '', stderr: 'session expired' });
-  const r = await createClaudeCode({ run, apiKey: 'x' }).runSession('/r', { sessionId: 's', promptFile: 'p' });
+  const r = await createClaudeCode({ run }).runSession('/r', { sessionId: 's', promptFile: 'p' });
   assert.equal(r.code, 1);
   assert.match(r.stderr, /session expired/);
 });
 
-test('reuses the same session id passed by the caller (scaffold + refine)', async () => {
+test('reuses the same session id passed by the caller (fallback mode)', async () => {
   const run = fakeRun();
-  const cc = createClaudeCode({ run, apiKey: 'x' });
+  const cc = createClaudeCode({ run });
   await cc.runSession('/r', { sessionId: 'card-1-phase1', promptFile: 'prompts/scaffold.md' });
   await cc.runSession('/r', { sessionId: 'card-1-phase1', promptFile: 'prompts/refine.md' });
   assert.ok(run.calls.every((c) => c.args.join(' ').includes('card-1-phase1')));
+});
+
+test('Bedrock mode parses <file> blocks and writes them to disk', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-test-'));
+  const promptFile = path.join(tmp, 'prompt.md');
+  fs.writeFileSync(promptFile, 'Create a hello world CLI');
+  const cc = createClaudeCode({
+    modelId: 'fake-model',
+    client: {
+      async send() {
+        return {
+          output: {
+            message: {
+              content: [{ text: '<file path="src/index.js">\nconsole.log("hello");\n</file>\n\nSummary: done.' }],
+            },
+          },
+        };
+      },
+    },
+  });
+  await cc.runSession(tmp, { sessionId: 's', promptFile });
+  const written = fs.readFileSync(path.join(tmp, 'src', 'index.js'), 'utf8');
+  assert.equal(written, 'console.log("hello");\n');
+  assert.ok(fs.existsSync(path.join(tmp, 'AI_NOTES.md')));
+  fs.rmSync(tmp, { recursive: true, force: true });
+});
+
+test('Bedrock mode writes AI_NOTES.md from response if no file block covers it', async () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-test-'));
+  const promptFile = path.join(tmp, 'prompt.md');
+  fs.writeFileSync(promptFile, 'do nothing');
+  const cc = createClaudeCode({
+    modelId: 'fake-model',
+    client: {
+      async send() {
+        return {
+          output: {
+            message: {
+              content: [{ text: 'Summary: no files needed.' }],
+            },
+          },
+        };
+      },
+    },
+  });
+  await cc.runSession(tmp, { sessionId: 's', promptFile });
+  const notes = fs.readFileSync(path.join(tmp, 'AI_NOTES.md'), 'utf8');
+  assert.match(notes, /Summary: no files needed/);
+  fs.rmSync(tmp, { recursive: true, force: true });
 });

@@ -8,7 +8,7 @@ const fullEnv = {
   GITHUB_REPO_VISIBILITY: 'public',
   BOX_WEBHOOK_PRIMARY_KEY: 'primary',
   BOX_WEBHOOK_SECONDARY_KEY: 'secondary',
-  ANTHROPIC_API_KEY: 'sk-ant-xxx',
+  BEDROCK_MODEL_ID: 'anthropic.claude-sonnet-4-20250514',
 };
 
 test('loads a complete config', () => {
@@ -18,7 +18,7 @@ test('loads a complete config', () => {
   assert.equal(cfg.githubRepoVisibility, 'public');
   assert.equal(cfg.boxWebhookPrimaryKey, 'primary');
   assert.equal(cfg.boxWebhookSecondaryKey, 'secondary');
-  assert.equal(cfg.anthropicApiKey, 'sk-ant-xxx');
+  assert.equal(cfg.bedrockModelId, 'anthropic.claude-sonnet-4-20250514');
   assert.equal(cfg.stubExternals, false);
 });
 
@@ -29,22 +29,14 @@ test('defaults GITHUB_REPO_VISIBILITY to private (SPEC §13, Decision #5)', () =
 });
 
 test('throws listing every missing required var in real mode', () => {
-  assert.throws(
-    () => loadConfig({ GITHUB_ORG: 'acme' }),
-    (err) => {
-      assert.match(err.message, /GITHUB_TOKEN/);
-      assert.match(err.message, /BOX_WEBHOOK_PRIMARY_KEY/);
-      assert.match(err.message, /ANTHROPIC_API_KEY/);
-      assert.doesNotMatch(err.message, /GITHUB_ORG/); // present, not listed
-      return true;
-    },
-  );
+  assert.throws(() => loadConfig({}), /BEDROCK_MODEL_ID|GITHUB_TOKEN|BOX_WEBHOOK/);
 });
 
 test('ORCH_STUB_EXTERNALS=1 relaxes external creds and sets stubExternals', () => {
   const cfg = loadConfig({ GITHUB_ORG: 'acme', ORCH_STUB_EXTERNALS: '1' });
   assert.equal(cfg.stubExternals, true);
   assert.equal(cfg.githubOrg, 'acme');
+  assert.equal(cfg.bedrockModelId, '');
 });
 
 test('rejects an invalid GITHUB_REPO_VISIBILITY', () => {

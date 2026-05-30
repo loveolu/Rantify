@@ -20,7 +20,8 @@ PORT=8080 node orchestrator/index.mjs       # POST /webhooks/box + 30s poller
 ```
 
 Requires the env vars in SPEC.md §13 (`GITHUB_TOKEN`, `GITHUB_ORG`, `BOX_WEBHOOK_*`,
-`ANTHROPIC_API_KEY`, …) and `git`, `gh`, `claude`, `node`, `npm` on PATH.
+`BEDROCK_MODEL_ID`, …) and `git`, `gh`, `node`, `npm` on PATH. AWS credentials
+are resolved by the SDK (env vars, `~/.aws/credentials`, or IAM role).
 
 ## Map
 

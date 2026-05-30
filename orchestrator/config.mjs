@@ -14,7 +14,7 @@ const EXTERNAL_REQUIRED = [
   'GITHUB_TOKEN',
   'BOX_WEBHOOK_PRIMARY_KEY',
   'BOX_WEBHOOK_SECONDARY_KEY',
-  'ANTHROPIC_API_KEY',
+  'BEDROCK_MODEL_ID',
 ];
 
 /** Vars always required (orchestrator can't route or name repos without them). */
@@ -23,8 +23,9 @@ const ALWAYS_REQUIRED = ['GITHUB_ORG'];
 /**
  * @param {Record<string, string|undefined>} [env]
  * @returns {Readonly<{githubToken:string, githubOrg:string, githubRepoVisibility:string,
- *   boxWebhookPrimaryKey:string, boxWebhookSecondaryKey:string, anthropicApiKey:string,
- *   stubExternals:boolean}>}
+ *   boxWebhookPrimaryKey:string, boxWebhookSecondaryKey:string, bedrockRegion:string,
+ *   bedrockModelId:string, githubOAuthClientId:string, githubOAuthClientSecret:string,
+ *   oauthRedirectUri:string, stubExternals:boolean}>}
  */
 export function loadConfig(env = process.env) {
   const stubExternals = TRUE_VALUES.has(String(env.ORCH_STUB_EXTERNALS ?? '').toLowerCase());
@@ -46,7 +47,11 @@ export function loadConfig(env = process.env) {
     githubRepoVisibility,
     boxWebhookPrimaryKey: env.BOX_WEBHOOK_PRIMARY_KEY ?? '',
     boxWebhookSecondaryKey: env.BOX_WEBHOOK_SECONDARY_KEY ?? '',
-    anthropicApiKey: env.ANTHROPIC_API_KEY ?? '',
+    bedrockRegion: env.BEDROCK_REGION ?? env.AWS_REGION ?? '',
+    bedrockModelId: env.BEDROCK_MODEL_ID ?? '',
+    githubOAuthClientId: env.GITHUB_OAUTH_CLIENT_ID ?? '',
+    githubOAuthClientSecret: env.GITHUB_OAUTH_CLIENT_SECRET ?? '',
+    oauthRedirectUri: env.OAUTH_REDIRECT_URI ?? `${env.ORCHESTRATOR_HOST ?? 'http://localhost:8080'}/auth/github/callback`,
     stubExternals,
   });
 }

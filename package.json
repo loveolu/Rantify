@@ -17,6 +17,7 @@
     "setup:phase0": "node setup/phase0.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1057.0",
     "box-typescript-sdk-gen": "^1.19.1",
     "js-yaml": "^4.1.0"
   },

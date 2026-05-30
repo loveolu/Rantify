@@ -81,3 +81,42 @@ test('a non-zero git exit throws (callers treat it as phase failure)', async () 
   const run = fakeRun({ 'git push': { code: 1, stdout: '', stderr: 'rejected' } });
   await assert.rejects(createGitHub({ run, ...cfg }).push('/tmp/repo'), /rejected/);
 });
+
+test('createRepo with email uses user login and token', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'ghp_user', login: 'alice' });
+  const gh = createGitHub({ run, ...cfg, getToken });
+  const url = await gh.createRepo('my-tool', 'alice@x.com');
+  const c = run.calls[0];
+  assert.ok(c.args.includes('alice/my-tool'));
+  assert.equal(c.opts.env.GH_TOKEN, 'ghp_user');
+  assert.equal(url, 'https://github.com/alice/my-tool');
+});
+
+test('createRepo without email falls back to org', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'u', login: 'alice' });
+  const gh = createGitHub({ run, ...cfg, getToken });
+  const url = await gh.createRepo('tool');
+  const c = run.calls[0];
+  assert.ok(c.args.includes('acme/tool'));
+  assert.equal(c.opts.env.GH_TOKEN, 'ghp_tok');
+});
+
+test('addRemoteAndPush with email embeds user token in remote URL', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'ghp_user', login: 'alice' });
+  const gh = createGitHub({ run, ...cfg, getToken });
+  await gh.addRemoteAndPush('/r', 'https://github.com/alice/tool', 'alice@x.com');
+  const remote = run.calls.find((c) => c.args[0] === 'remote');
+  assert.match(remote.args[3], /x-access-token:ghp_user/);
+  assert.match(remote.args[3], /github\.com\/alice\/tool/);
+});
+
+test('createPr with email uses user token', async () => {
+  const run = fakeRun({ 'pr create': { code: 0, stdout: 'https://github.com/alice/tool/pull/1\n', stderr: '' } });
+  const getToken = () => ({ token: 'ghp_user', login: 'alice' });
+  const gh = createGitHub({ run, ...cfg, getToken });
+  await gh.createPr('/r', { title: 'PR', bodyFile: 'b.md' }, 'alice@x.com');
+  assert.equal(run.calls[0].opts.env.GH_TOKEN, 'ghp_user');
+});

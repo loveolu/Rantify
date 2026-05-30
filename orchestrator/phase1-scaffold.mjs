@@ -39,8 +39,8 @@ export async function phase1Scaffold(fileId, meta, deps) {
         JSON.stringify({ name: slug, version: '0.0.0', private: true, devtool_build_card_id: cardId }, null, 2));
       await gh.init(repoDir);
       await gh.commitAll(repoDir, 'chore: add Build Card spec');
-      repoUrl = await gh.createRepo(slug);
-      await gh.addRemoteAndPush(repoDir, repoUrl);
+      repoUrl = await gh.createRepo(slug, meta.creator_email);
+      await gh.addRemoteAndPush(repoDir, repoUrl, meta.creator_email);
       await box.setMetadata(fileId, { repo_url: repoUrl });
     }
 
@@ -65,7 +65,7 @@ export async function phase1Scaffold(fileId, meta, deps) {
     fs.writeFileSync(path.join(repoDir, 'PR_BODY.md'),
       buildPrBody({ boxFileUrl: `box://file/${fileId}`, theme: meta.theme, painScore: meta.pain_score, aiNotes, testOutput: testRes.output }));
     await withRetry(() => gh.push(repoDir));
-    const prUrl = await gh.createPr(repoDir, { title: `AI Scaffold: ${title}`, bodyFile: 'PR_BODY.md' });
+    const prUrl = await gh.createPr(repoDir, { title: `AI Scaffold: ${title}`, bodyFile: 'PR_BODY.md' }, meta.creator_email);
     await box.setMetadata(fileId, { pr_url: prUrl });
 
     await box.uploadArtifact({ cardId, name: 'REVIEW_NOTES.md', area: 'card',
