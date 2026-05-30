@@ -6,7 +6,8 @@
 import { getBoxClient } from '../lib/auth.mjs';
 import { ensureFolderTree, ensureCollaborator } from '../lib/folders.mjs';
 
-export async function createFolders(client = getBoxClient(), env = process.env) {
+export async function createFolders(client, env = process.env) {
+  if (!client) client = await getBoxClient();
   const ids = await ensureFolderTree(client);
   const email = env.REVIEWER_EMAIL;
   if (email) {

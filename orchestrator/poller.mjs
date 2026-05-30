@@ -9,6 +9,17 @@
 
 const TRIGGER_STATUSES = ['ready-for-build', 'building-approved'];
 
+function safeError(err) {
+  if (!err) return '';
+  if (err?.constructor?.name === 'BoxApiError') {
+    const own = Object.getOwnPropertyNames(err);
+    const info = {};
+    for (const k of own) try { info[k] = err[k]; } catch {}
+    return `BoxApiError: ${err.message || '(no message)'}\n${JSON.stringify(info, null, 2)}`;
+  }
+  return err.stack || String(err);
+}
+
 /**
  * @param {{box: {listCardsByStatus: (s:string)=>Promise<{fileId:string,cardId:string}[]>},
  *          onCard: (fileId:string, cardId:string)=>void|Promise<void>}} deps
@@ -24,14 +35,16 @@ export function createPoller({ box, onCard }) {
         inFlight.add(cardId);
         Promise.resolve()
           .then(() => onCard(fileId, cardId))
-          .catch((err) => console.error('[poller] onCard error:', err))
+          .catch((err) => console.error('[poller] onCard error:', safeError(err)))
           .finally(() => inFlight.delete(cardId));
       }
     }
   }
 
   function start(intervalMs = 30_000) {
-    const timer = setInterval(() => { tick().catch((e) => console.error('[poller] tick error:', e)); }, intervalMs);
+    const timer = setInterval(() => {
+      tick().catch((e) => console.error('[poller] tick error:', safeError(e)));
+    }, intervalMs);
     timer.unref?.();
     return () => clearInterval(timer);
   }

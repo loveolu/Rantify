@@ -11,6 +11,10 @@ fi
 cleanup() { kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit; }
 trap cleanup SIGINT SIGTERM
 
+# ── free ports ──
+lsof -ti tcp:8080 | xargs kill -9 2>/dev/null || true
+lsof -ti tcp:5173 | xargs kill -9 2>/dev/null || true
+
 echo "┌──────────────────────────────────────┐"
 echo "│  DevTool Loop — starting…            │"
 echo "└──────────────────────────────────────┘"

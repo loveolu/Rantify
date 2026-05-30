@@ -11,6 +11,7 @@
 
 import http from 'node:http';
 import { verifyBoxSignature } from './hmac.mjs';
+import { safeError } from './phase-common.mjs';
 
 /**
  * @param {{config: {boxWebhookPrimaryKey:string, boxWebhookSecondaryKey:string},
@@ -28,7 +29,7 @@ export function createWebhookServer({ config, onEvent, githubOAuth, api }) {
 
     if (url.startsWith('/api/')) {
       return void Promise.resolve(api(req, res)).catch((err) => {
-        console.error('[api] error:', err);
+        console.error('[api] error:', safeError(err));
         if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: err.message })); }
       });
     }
@@ -50,7 +51,7 @@ export function createWebhookServer({ config, onEvent, githubOAuth, api }) {
         if (!fileId) { res.writeHead(400).end('missing source.id'); return; }
 
         res.writeHead(200).end('ok');
-        Promise.resolve(onEvent(fileId)).catch((err) => console.error('[webhook] handler error:', err));
+        Promise.resolve(onEvent(fileId)).catch((err) => console.error('[webhook] handler error:', safeError(err)));
       });
       return;
     }

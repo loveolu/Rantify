@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api';
+import { STATUS_LABEL, STATUS_COLOR } from '../lib/status';
+
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 const STATUS_ACTIONS = [
-  { label: 'Ready for build', status: 'ready-for-build', from: ['inbox'] },
-  { label: 'Building approved', status: 'building-approved', from: ['building'] },
-  { label: 'Completed', status: 'completed', from: ['building-approved'] },
-  { label: 'Fail', status: 'failed', from: ['inbox', 'ready-for-build', 'building', 'building-approved'] },
+  { label: 'Move to ready', status: 'ready-for-build', from: ['inbox'], variant: 'btn-ghost' },
+  { label: 'Approve build', status: 'building-approved', from: ['building'], variant: 'btn-ghost' },
+  { label: 'Ship it', status: 'completed', from: ['building-approved'], variant: 'btn-accent' },
+  { label: 'Mark failed', status: 'failed', from: ['inbox', 'ready-for-build', 'building', 'building-approved'], variant: 'btn-ghost' },
 ];
 
 export default function CardDetail() {
@@ -22,7 +25,7 @@ export default function CardDetail() {
       api(`/api/cards/${fileId}/spec`).catch(() => ({ content: '' })),
     ])
       .then(([cardData, specData]) => { setCard(cardData); setSpec(specData.content); })
-      .catch(err => setError(err.message));
+      .catch((err) => setError(err.message));
   }, [fileId]);
 
   async function changeStatus(status) {
@@ -31,49 +34,54 @@ export default function CardDetail() {
   }
 
   if (error) return <div className="error">{error}</div>;
-  if (!card) return <div className="loading">Loading card…</div>;
+  if (!card) return <div className="loading"><span className="pulse" /> Loading card…</div>;
 
   const metaFields = [
-    ['Status', card.status],
     ['Theme', card.theme],
-    ['Pain Score', card.pain_score],
+    ['Pain score', card.pain_score != null ? Number(card.pain_score).toFixed(2) : null],
     ['Card ID', card.card_id],
-    ['Creator Email', card.creator_email],
-    ['Session ID', card.builder_session_id],
-    ['Repo URL', card.repo_url],
-    ['PR URL', card.pr_url],
-    ['Box Task ID', card.box_task_id],
+    ['Creator', card.creator_email],
+    ['Build session', card.builder_session_id],
+    ['Repo', card.repo_url],
+    ['Pull request', card.pr_url],
+    ['Box task', card.box_task_id],
   ];
 
-  const allowedActions = STATUS_ACTIONS.filter(a => a.from.includes(card.status));
+  const allowed = STATUS_ACTIONS.filter((a) => a.from.includes(card.status));
+  const color = STATUS_COLOR[card.status] || 'var(--st-inbox)';
 
   return (
     <div className="card-detail">
-      <button className="back" onClick={() => navigate('/')}>← Back</button>
-      <h1>{card.theme}</h1>
+      <button className="back" onClick={() => navigate('/app')}>← Back to pipeline</button>
+
+      <div className="detail-hero">
+        <span className="pill" style={{ background: color }}>{STATUS_LABEL[card.status] || card.status}</span>
+      </div>
+      <h1>{card.theme || 'Untitled request'}</h1>
 
       <section className="detail-section">
         <h2>Metadata</h2>
-        <table className="meta-table">
-          <tbody>
-            {metaFields.map(([k, v]) => (
-              <tr key={k}>
-                <th>{k}</th>
-                <td>{v != null ? (k.includes('URL') ? <a href={v} target="_blank">{v}</a> : String(v)) : '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="meta-grid">
+          {metaFields.map(([k, v]) => {
+            const isUrl = /repo|request|url/i.test(k) && v;
+            return (
+              <div className="meta-cell" key={k}>
+                <div className="k">{k}</div>
+                <div className={`v ${v == null ? 'muted' : ''}`}>
+                  {v == null ? '—' : isUrl ? <a href={v} target="_blank" rel="noreferrer">{v} ↗</a> : String(v)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
 
-      {allowedActions.length > 0 && (
+      {allowed.length > 0 && (
         <section className="detail-section">
-          <h2>Actions</h2>
+          <h2>Move this card</h2>
           <div className="actions">
-            {allowedActions.map(a => (
-              <button key={a.status} className={`btn btn-${a.status}`} onClick={() => changeStatus(a.status)}>
-                {a.label}
-              </button>
+            {allowed.map((a) => (
+              <button key={a.status} className={`btn ${a.variant}`} onClick={() => changeStatus(a.status)}>{a.label}</button>
             ))}
           </div>
         </section>
@@ -81,15 +89,17 @@ export default function CardDetail() {
 
       <section className="detail-section">
         <h2>Spec</h2>
-        <pre className="spec-viewer">{spec}</pre>
+        <pre className="spec-viewer">{spec || 'No spec available.'}</pre>
       </section>
 
       {card.has_artifacts?.length > 0 && (
         <section className="detail-section">
           <h2>Artifacts</h2>
           <ul className="artifacts">
-            {card.has_artifacts.map(name => (
-              <li key={name}><a href={`/api/cards/${fileId}/artifacts/${name}`} target="_blank">{name}</a></li>
+            {card.has_artifacts.map((name) => (
+              <li key={name}>
+                <a href={`${BASE}/api/cards/${fileId}/artifacts/${name}`} target="_blank" rel="noreferrer">{name}</a>
+              </li>
             ))}
           </ul>
         </section>

@@ -10,7 +10,8 @@ import { needsWebhook } from './webhook-plan.mjs';
 
 const TRIGGERS = ['METADATA_INSTANCE.UPDATED', 'ITEM.MOVED'];
 
-export async function registerWebhooks(client = getBoxClient(), env = process.env) {
+export async function registerWebhooks(client, env = process.env) {
+  if (!client) client = await getBoxClient();
   const host = env.ORCHESTRATOR_HOST;
   if (!host) throw new Error('ORCHESTRATOR_HOST is required to register webhooks (SPEC §13)');
   const address = `${host.replace(/\/$/, '')}/webhooks/box`;

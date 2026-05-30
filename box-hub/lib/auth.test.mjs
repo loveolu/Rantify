@@ -17,11 +17,11 @@ test('requireBoxEnv throws naming every missing variable', () => {
   });
 });
 
-test('getBoxClient memoizes (builds the client once)', () => {
+test('getBoxClient memoizes (builds the client once)', async () => {
   let built = 0;
   const makeClient = () => ({ id: ++built });
-  const a = getBoxClient(fullEnv, makeClient);
-  const b = getBoxClient(fullEnv, makeClient);
+  const a = await getBoxClient(fullEnv, makeClient);
+  const b = await getBoxClient(fullEnv, makeClient);
   assert.equal(a, b);
   assert.equal(built, 1);
 });
