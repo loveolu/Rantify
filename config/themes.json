@@ -1,0 +1,16 @@
+{
+  "themes": [
+    {
+      "id": "testing-ci",
+      "label": "Testing & CI",
+      "description": "Flaky tests, slow CI pipelines, test triage, intermittent failures.",
+      "active": true
+    },
+    {
+      "id": "observability",
+      "label": "Observability",
+      "description": "Logging, tracing, metrics tooling gaps. Reserved for post-hackathon.",
+      "active": false
+    }
+  ]
+}
