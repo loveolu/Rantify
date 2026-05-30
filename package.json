@@ -8,10 +8,11 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "test": "node --test orchestrator/*.test.mjs contracts/*.test.mjs",
-    "test:orchestrator": "node --test orchestrator/*.test.mjs contracts/*.test.mjs",
+    "test": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs",
+    "test:orchestrator": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs",
     "verify:mock": "node contracts/verify-mock.mjs",
     "verify:orchestrator": "node orchestrator/verify-orchestrator.mjs",
+    "verify:box": "node box-hub/verify-real.mjs",
     "setup:phase0": "node setup/phase0.mjs"
   },
   "dependencies": {
