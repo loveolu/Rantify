@@ -49,5 +49,11 @@ export function createGitHub({ run, token, org, visibility }) {
       const r = await gh(cwd, ['pr', 'create', '--title', title, '--body-file', bodyFile]);
       return r.stdout.trim();
     },
+
+    // Best-effort: missing PR / no comments must not fail the refine phase (SPEC §8.4).
+    async prComments(cwd) {
+      const r = await run('gh', ['pr', 'view', '--comments'], { cwd, env: ghEnv });
+      return r.code === 0 ? r.stdout : '';
+    },
   };
 }

@@ -9,10 +9,10 @@ import { phase2Refine } from './phase2-refine.mjs';
 const CARD_ID = '550e8400-e29b-41d4-a716-446655440000';
 const sampleSpec = fs.readFileSync(path.join(import.meta.dirname, '..', 'fixtures', 'sample-spec.md'), 'utf8');
 
-function fakeGh({ diff = '' } = {}) {
+function fakeGh({ diff = '', prComments = '' } = {}) {
   const calls = [];
   const rec = (n) => (...a) => { calls.push([n, ...a]); };
-  return { calls, commitAll: rec('commitAll'), push: rec('push'), async diff() { return diff; } };
+  return { calls, commitAll: rec('commitAll'), push: rec('push'), async diff() { return diff; }, async prComments() { return prComments; } };
 }
 function fakeCc(results = [{ code: 0, stdout: '', stderr: '' }]) {
   const calls = []; let i = 0;
@@ -65,12 +65,14 @@ test('resumes the SAME session id with the refine prompt (§9.1)', async () => {
   assert.match(cc.calls[0][1].promptFile, /refine\.md/);
 });
 
-test('drops reviewer notes into the repo before refining', async () => {
+test('drops the Box REVIEW_NOTES + PR comments into the repo before refining (§8.4)', async () => {
   const { box, fileId, meta, workRoot, repoDir } = await setup();
   let notesAtRunTime = null;
-  const cc = { calls: [], async runSession(cwd) { notesAtRunTime = fs.existsSync(path.join(repoDir, 'REVIEW_NOTES.md')); return { code: 0 }; } };
-  await phase2Refine(fileId, meta, { box, ...deps({ workRoot, cc }) });
-  assert.equal(notesAtRunTime, true);
+  const cc = { calls: [], async runSession() { notesAtRunTime = fs.readFileSync(path.join(repoDir, 'REVIEW_NOTES.md'), 'utf8'); return { code: 0 }; } };
+  const gh = fakeGh({ prComments: 'reviewer: rename the flag' });
+  await phase2Refine(fileId, meta, { box, ...deps({ workRoot, cc, gh }) });
+  assert.match(notesAtRunTime, /add edge tests/);      // from the Box REVIEW_NOTES artifact
+  assert.match(notesAtRunTime, /rename the flag/);      // from PR comments
 });
 
 test('build failure → status=failed, not completed (§11)', async () => {
@@ -94,10 +96,14 @@ test('a detected secret blocks the push and fails (§12.5)', async () => {
   assert.equal(gh.calls.find((c) => c[0] === 'push'), undefined);
 });
 
-test('session-expiry: a failed resume falls back to a fresh attempt then completes (§9.1)', async () => {
-  const { box, fileId, meta, workRoot } = await setup();
+test('session-expiry: fallback uses a FRESH session id, re-injects spec.md, then completes (§9.1)', async () => {
+  const { box, fileId, meta, workRoot, repoDir } = await setup();
   const cc = fakeCc([{ code: 1, stderr: 'session expired' }, { code: 0 }]);
   await phase2Refine(fileId, meta, { box, ...deps({ workRoot, cc }) });
   assert.equal(cc.calls.length, 2);
+  const [first, second] = cc.calls.map((c) => c[1].sessionId);
+  assert.equal(first, `${CARD_ID}-phase1`, 'first attempt resumes the original session');
+  assert.notEqual(second, first, 'fallback starts a fresh session');
+  assert.ok(fs.existsSync(path.join(repoDir, 'specs', 'devtool-loop', 'spec.md')), 'context re-injected');
   assert.equal((await box.getMetadata(fileId)).status, 'completed');
 });

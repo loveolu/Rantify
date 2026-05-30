@@ -133,6 +133,13 @@ export class FileSystemBoxClient /* extends BoxClient (duck-typed to avoid impor
     return { fileId: `file_${randomUUID()}` };
   }
 
+  async getArtifact({ cardId, name, area = 'card' }) {
+    const dir = area === 'logs' ? this.logsDir : path.join(this.cardsDir, cardId);
+    const src = path.join(dir, name);
+    if (!fs.existsSync(src)) throw new Error(`artifact not found: ${name}`);
+    return fs.readFileSync(src, 'utf8');
+  }
+
   async createTask({ fileId, message, assignee = 'reviewers', dueDays = 3 }) {
     const cardId = this._cardIdForFile(fileId);
     const taskId = `task_${randomUUID()}`;

@@ -63,6 +63,18 @@ test('diff returns git diff stdout for the secret scan', async () => {
   assert.equal(out, '+secret');
 });
 
+test('prComments returns reviewer comments via gh, empty string when none', async () => {
+  const run = fakeRun({ 'pr view': { code: 0, stdout: 'reviewer: tighten the README\n', stderr: '' } });
+  const out = await createGitHub({ run, ...cfg }).prComments('/tmp/repo');
+  assert.match(out, /tighten the README/);
+});
+
+test('prComments tolerates a gh failure (returns empty, never throws)', async () => {
+  const run = fakeRun({ 'pr view': { code: 1, stdout: '', stderr: 'no PR' } });
+  const out = await createGitHub({ run, ...cfg }).prComments('/tmp/repo');
+  assert.equal(out, '');
+});
+
 test('a non-zero git exit throws (callers treat it as phase failure)', async () => {
   const run = fakeRun({ 'git push': { code: 1, stdout: '', stderr: 'rejected' } });
   await assert.rejects(createGitHub({ run, ...cfg }).push('/tmp/repo'), /rejected/);

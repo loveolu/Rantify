@@ -110,6 +110,16 @@ export class BoxClient {
   async uploadArtifact(a) { throw new Error('not implemented: uploadArtifact'); }
 
   /**
+   * Read back an artifact previously written with uploadArtifact (SPEC.md §8.4 — Phase 2
+   * fetches REVIEW_NOTES.md to carry reviewer feedback into the refine session).
+   * Added to the frozen contract as a NEW method (no existing signature changed); Person B
+   * must implement it on the real client.
+   * @param {{cardId: string, name: string, area?: 'card'|'logs'}} a
+   * @returns {Promise<string>} the artifact's text content
+   */
+  async getArtifact(a) { throw new Error('not implemented: getArtifact'); }
+
+  /**
    * Create the Box approval task on spec.md (SPEC.md §7.3). UI affordance only —
    * the canonical approval signal is the metadata status change.
    * @param {{fileId: string, message: string, assignee?: string, dueDays?: number}} t

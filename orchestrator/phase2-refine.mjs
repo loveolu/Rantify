@@ -27,19 +27,23 @@ export async function phase2Refine(fileId, meta, deps) {
   try {
     fs.mkdirSync(repoDir, { recursive: true });
 
-    // §8.4: carry reviewer feedback into the repo before refining.
+    // §8.4: carry reviewer feedback (Box REVIEW_NOTES + PR review comments) into the repo.
     const reviewerNotes = await readArtifact(box, cardId, 'REVIEW_NOTES.md');
-    fs.writeFileSync(path.join(repoDir, 'REVIEW_NOTES.md'), reviewerNotes);
+    const prComments = (await gh.prComments?.(repoDir)) ?? '';
+    const notesPath = path.join(repoDir, 'REVIEW_NOTES.md');
+    fs.writeFileSync(notesPath, reviewerNotes + (prComments ? `\n\n## PR review comments\n${prComments}` : ''));
 
-    // §9.1: resume same session; one fallback attempt on failure.
+    // §9.1: resume the same session; on failure, start a FRESH session and re-inject context.
     let res = await cc.runSession(repoDir, { sessionId, promptFile: refinePromptPath });
     let sessionFallback = false;
     if (res.code !== 0) {
       sessionFallback = true;
-      fs.appendFileSync(path.join(repoDir, 'REVIEW_NOTES.md'),
-        '\n\n> Session resume failed; retrying with re-injected context (SPEC §9.1).\n');
-      res = await cc.runSession(repoDir, { sessionId, promptFile: refinePromptPath });
+      await reinjectContext(box, fileId, repoDir);
+      fs.appendFileSync(notesPath, '\n\n> Session resume failed; started a fresh session with re-injected context (SPEC §9.1).\n');
+      const freshSession = `${cardId}-phase2-${now().getTime()}`;
+      res = await cc.runSession(repoDir, { sessionId: freshSession, promptFile: refinePromptPath });
       if (res.code !== 0) throw new PhaseError(`Claude Code refine failed twice: ${res.stderr ?? ''}`);
+      await box.setMetadata(fileId, { builder_session_id: freshSession });
     }
 
     const buildRes = await build.build(repoDir);
@@ -66,8 +70,21 @@ export async function phase2Refine(fileId, meta, deps) {
 }
 
 async function readArtifact(box, cardId, name) {
-  if (typeof box.getArtifact === 'function') {
-    try { return await box.getArtifact(cardId, name); } catch { /* fall through */ }
+  try {
+    return await box.getArtifact({ cardId, name });
+  } catch {
+    return `# Review notes\n(REVIEW_NOTES.md not found on Box card ${cardId}.)\n`;
   }
-  return `# Review notes\n(See Box card ${cardId}.)\n`;
+}
+
+/** §9.1: re-inject spec.md from Box so a fresh Claude session has the requirements. */
+async function reinjectContext(box, fileId, repoDir) {
+  try {
+    const spec = await box.getSpecMarkdown(fileId);
+    const dir = path.join(repoDir, 'specs', 'devtool-loop');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'spec.md'), spec);
+  } catch (err) {
+    console.error('[phase2] re-inject failed:', err);
+  }
 }
