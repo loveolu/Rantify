@@ -3,26 +3,47 @@ import assert from 'node:assert/strict';
 import fc from 'fast-check';
 import { scrape, mapItem, dedup, cap, buildApifyPayload } from '../scraper.mjs';
 
-const config = { subreddits: ['programming'], keywords: ['flaky test'], max_posts_per_run: 50 };
+const config = { subreddits: ['programming', 'devops'], keywords: ['flaky test', 'slow ci'], max_posts_per_run: 50 };
+// A post item in trudax/reddit-scraper-lite's output shape.
+const litePost = (over = {}) => ({
+  id: 't3_abc', parsedId: 'abc', url: 'https://www.reddit.com/r/programming/comments/abc/x/',
+  username: 'devuser', title: 'CI is flaky', communityName: 'r/programming', parsedCommunityName: 'programming',
+  body: 'our tests are flaky', upVotes: 12, createdAt: '2026-05-01T10:00:00.000Z', dataType: 'post', ...over,
+});
 const okFetch = (items) => async () => ({ ok: true, status: 200, json: async () => items });
 
 // Feature: idea-miner, Property 1: Post field extraction is complete
-test('Property 1: mapItem extracts all 7 fields, body from selftext ?? body ?? ""', () => {
+test('Property 1: mapItem maps the Lite actor shape to all 7 Post fields; createdAt → unix seconds', () => {
   fc.assert(fc.property(
-    fc.record({ id: fc.string(), author: fc.string(), subreddit: fc.string(), score: fc.integer(), created_utc: fc.integer(), permalink: fc.string(), selftext: fc.option(fc.string(), { nil: undefined }) }),
-    (item) => {
+    fc.record({ id: fc.string({ minLength: 1 }), username: fc.string(), parsedCommunityName: fc.string(), upVotes: fc.integer(), createdAt: fc.date({ min: new Date('2000-01-01'), max: new Date('2030-01-01') }), url: fc.webUrl(), title: fc.string(), body: fc.string() }),
+    (raw) => {
+      const item = { ...raw, createdAt: raw.createdAt.toISOString(), dataType: 'post' };
       const p = mapItem(item);
       for (const k of ['id', 'author', 'subreddit', 'score', 'created_utc', 'permalink', 'body']) assert.ok(k in p);
-      assert.equal(p.body, item.selftext ?? item.body ?? '');
+      assert.equal(p.author, raw.username);
+      assert.equal(p.subreddit, raw.parsedCommunityName);
+      assert.equal(p.score, raw.upVotes);
+      assert.equal(p.permalink, raw.url);
+      assert.equal(p.created_utc, Math.floor(Date.parse(item.createdAt) / 1000));
+      assert.equal(typeof p.created_utc, 'number');
     },
   ));
 });
 
+test('mapItem is tolerant of the generic actor shape too (author/score/created_utc/permalink)', () => {
+  const p = mapItem({ id: 'x', author: 'a', subreddit: 's', score: 7, created_utc: 1700000000, permalink: '/r/s/x', body: 'b', dataType: 'post' });
+  assert.equal(p.author, 'a'); assert.equal(p.score, 7); assert.equal(p.created_utc, 1700000000); assert.equal(p.subreddit, 's');
+});
+
+test('mapItem folds the title into body so keyword scoring/clustering sees it', () => {
+  const p = mapItem(litePost({ title: 'slow ci pipeline', body: '' }));
+  assert.match(p.body, /slow ci pipeline/);
+});
+
 // Feature: idea-miner, Property 2: Deduplication produces unique post ids
-test('Property 2: dedup yields unique ids, first occurrence kept', () => {
+test('Property 2: dedup yields unique ids', () => {
   fc.assert(fc.property(fc.array(fc.record({ id: fc.string({ maxLength: 3 }) })), (rows) => {
-    const out = dedup(rows.map((r, i) => ({ ...r, n: i })));
-    const ids = out.map((r) => r.id);
+    const ids = dedup(rows).map((r) => r.id);
     assert.equal(ids.length, new Set(ids).size);
   }));
 });
@@ -34,12 +55,17 @@ test('Property 3: cap limits length to max_posts_per_run', () => {
   }));
 });
 
-test('buildApifyPayload carries subreddits, searchPhrases, maxItems, type', () => {
-  const p = buildApifyPayload(config);
-  assert.deepEqual(p.subreddits, ['programming']);
-  assert.deepEqual(p.searchPhrases, ['flaky test']);
-  assert.equal(p.maxItems, 50);
-  assert.equal(p.type, 'posts');
+test('buildApifyPayload uses native keyword search and spreads maxItems across keywords', () => {
+  const p = buildApifyPayload(config); // 2 keywords, max 50
+  assert.deepEqual(p.searches, ['flaky test', 'slow ci']);
+  assert.equal(p.searchPosts, true);
+  assert.equal(p.sort, 'relevance');
+  assert.equal(p.maxItems, 25); // ceil(50 / 2 keywords) — caps per-query billing
+});
+
+test('timeFilter maps window_days to the actor\'s coarse time bucket', () => {
+  assert.equal(buildApifyPayload({ ...config, window_days: 5 }).time, 'week');
+  assert.equal(buildApifyPayload({ ...config, window_days: 60 }).time, 'year');
 });
 
 test('missing APIFY_TOKEN throws before any HTTP call (Req 1.7)', async () => {
@@ -50,11 +76,11 @@ test('missing APIFY_TOKEN throws before any HTTP call (Req 1.7)', async () => {
   if (prev !== undefined) process.env.APIFY_TOKEN = prev;
 });
 
-test('request URL hits the reddit-scraper endpoint with ?token= (Req 1.2)', async () => {
+test('request hits the practicaltools reddit-api endpoint with ?token= (Req 1.2)', async () => {
   process.env.APIFY_TOKEN = 'tkn';
   let url;
-  await scrape(config, { fetchImpl: async (u) => { url = u; return { ok: true, status: 200, json: async () => [{ id: '1', author: 'a', subreddit: 's', created_utc: 1, permalink: '/', selftext: 'x' }] }; } });
-  assert.match(url, /api\.apify\.com\/v2\/acts\/apify~reddit-scraper\/run-sync-get-dataset-items/);
+  await scrape(config, { fetchImpl: async (u) => { url = u; return { ok: true, status: 200, json: async () => [litePost()] }; } });
+  assert.match(url, /api\.apify\.com\/v2\/acts\/practicaltools~apify-reddit-api\/run-sync-get-dataset-items/);
   assert.match(url, /token=tkn/);
 });
 
@@ -68,13 +94,21 @@ test('zero results throws (Req 1.8)', async () => {
   await assert.rejects(scrape(config, { fetchImpl: okFetch([]) }), /zero|no results|empty/i);
 });
 
-test('dedup + cap applied to a successful scrape', async () => {
+test('non-post dataType items (comments/communities) are filtered out', async () => {
   process.env.APIFY_TOKEN = 'tkn';
   const items = [
-    { id: '1', author: 'a', subreddit: 's', created_utc: 1, permalink: '/', selftext: 'x' },
-    { id: '1', author: 'a', subreddit: 's', created_utc: 1, permalink: '/', selftext: 'dup' },
-    { id: '2', author: 'b', subreddit: 't', created_utc: 1, permalink: '/', body: 'y' },
+    litePost({ id: 't3_1' }),
+    { id: 't1_c', dataType: 'comment', username: 'u', body: 'a comment' },
+    { id: 't5_q', dataType: 'community', title: 'r/programming' },
   ];
+  const out = await scrape(config, { fetchImpl: okFetch(items) });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].id, 't3_1');
+});
+
+test('dedup + cap applied to a successful scrape', async () => {
+  process.env.APIFY_TOKEN = 'tkn';
+  const items = [litePost({ id: 't3_1' }), litePost({ id: 't3_1' }), litePost({ id: 't3_2' })];
   const out = await scrape({ ...config, max_posts_per_run: 1 }, { fetchImpl: okFetch(items) });
   assert.equal(out.length, 1);
 });
