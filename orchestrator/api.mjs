@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
 
 const JSON_HEADER = { 'Content-Type': 'application/json' };
 
@@ -64,8 +65,7 @@ export function createApi({ box, tokenStore }) {
   async function authStatus(req, res) {
     const connections = [];
     if (tokenStore) {
-      const f = tokenStore.filePath;
-      const raw = await import('fs').then(fs => fs.promises.readFile(f, 'utf8').catch(() => '{}'));
+      const raw = await fs.readFile(tokenStore.filePath, 'utf8').catch(() => '{}');
       const data = JSON.parse(raw);
       for (const [email, entry] of Object.entries(data)) {
         connections.push({ email, login: entry.login, connected: true });
