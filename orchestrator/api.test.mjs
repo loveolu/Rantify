@@ -105,3 +105,25 @@ test('POST /api/auth/target updates a connected user and surfaces in /api/auth/s
   assert.equal(missing.status, 404);
   srv.close();
 });
+
+test('PUT /api/cards/:fileId persists status even when the Box folder move fails (status lives in metadata)', async () => {
+  // Reproduces the dashboard "move to Building fails" bug: moving into the In-Progress
+  // subfolder can throw against real Box, but the card's status is metadata-driven and
+  // must still be saved so the card lands in the target column.
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'move-fail-'));
+  const failBox = new FileSystemBoxClient({ root });
+  failBox.moveCard = async () => { throw new Error('Box: could not relocate folder'); };
+  const srv = http.createServer(createApi({ box: failBox, tokenStore: null }));
+  await new Promise((r) => srv.listen(0, r));
+  const b = `http://127.0.0.1:${srv.address().port}`;
+
+  const created = await (await fetch(`${b}/api/cards`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ theme: 'move-test', pain_score: 0.5 }) })).json();
+
+  const res = await fetch(`${b}/api/cards/${created.fileId}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'building' }) });
+  assert.equal(res.status, 200, 'a failed folder move must not fail the status change');
+  assert.equal((await res.json()).status, 'building');
+
+  const list = await (await fetch(`${b}/api/cards`)).json();
+  assert.equal(list.find((c) => c.fileId === created.fileId).status, 'building', 'status must be persisted in metadata');
+  srv.close();
+});

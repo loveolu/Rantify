@@ -101,7 +101,9 @@ export class RealBoxClient extends BoxClient {
     const tree = await this._tree();
     const folderId = await this._cardFolderId(cardId);
     if (!folderId) return;
-    await moveFolder(c, folderId, tree[`${ROOT}/${FOLDERS.buildCards}/${sf}`]);
+    const destId = tree[`${ROOT}/${FOLDERS.buildCards}/${sf}`];
+    if (!destId) return; // destination subfolder not provisioned — leave the card in place
+    await moveFolder(c, folderId, destId);
   }
 
   async listCardsByStatus(status) { const c = await this._client(); return listCardsByStatus(c, status, await this._rootId()); }

@@ -65,7 +65,14 @@ export function createApi({ box, tokenStore, mine, jobs = createJobRegistry() })
     if (!status) { json(res, 400, { error: 'missing status' }); return; }
     const meta = await box.getMetadata(fileId);
     await box.setMetadata(fileId, { status });
-    await box.moveCard(meta.card_id, status);
+    // Status (what the dashboard reads) now lives in metadata. Physically relocating the
+    // Box folder is best-effort organization — don't fail the whole status change if Box
+    // can't move the folder (e.g. a transient error or a missing destination subfolder).
+    try {
+      await box.moveCard(meta.card_id, status);
+    } catch (err) {
+      console.error(`setStatus: folder move failed for card ${meta.card_id} → ${status}:`, err?.message ?? err);
+    }
     json(res, 200, { ...meta, status });
   }
 
