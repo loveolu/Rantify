@@ -57,10 +57,12 @@ test('createPr returns the PR url printed by gh', async () => {
   assert.equal(url, 'https://github.com/acme/x/pull/7');
 });
 
-test('diff returns git diff stdout for the secret scan', async () => {
-  const run = fakeRun({ 'git diff': { code: 0, stdout: '+secret', stderr: '' } });
-  const out = await createGitHub({ run, ...cfg }).diff('/tmp/repo');
-  assert.equal(out, '+secret');
+test('stagedDiff stages everything then diffs --cached (so untracked files are included)', async () => {
+  const run = fakeRun({ 'diff --cached': { code: 0, stdout: '+new file content', stderr: '' } });
+  const out = await createGitHub({ run, ...cfg }).stagedDiff('/tmp/repo');
+  const cmds = run.calls.map((c) => [c.cmd, ...c.args].join(' '));
+  assert.deepEqual(cmds, ['git add -A', 'git diff --cached']);
+  assert.equal(out, '+new file content');
 });
 
 test('prComments returns reviewer comments via gh, empty string when none', async () => {

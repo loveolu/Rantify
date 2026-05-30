@@ -20,7 +20,7 @@ function fakeGh({ diff = '' } = {}) {
     push: rec('push'),
     async createRepo(slug) { calls.push(['createRepo', slug]); return `https://github.com/acme/${slug}`; },
     async createPr(cwd, o) { calls.push(['createPr', cwd, o]); return 'https://github.com/acme/x/pull/1'; },
-    async diff() { return diff; },
+    async stagedDiff() { return diff; },
   };
 }
 const fakeCc = (result = { code: 0, stdout: '', stderr: '' }) => {
@@ -88,11 +88,12 @@ test('commits spec.md + package.json carrying the card id (traceability §12.1)'
   assert.equal(pkg.devtool_build_card_id, CARD_ID);
 });
 
-test('writes REVIEW_NOTES.md and creates a Box approval task', async () => {
+test('writes REVIEW_NOTES.md and creates a Box approval task carrying the repo URL', async () => {
   const { box, fileId, meta, workRoot, root } = await setup();
   await phase1Scaffold(fileId, meta, { box, ...deps({ workRoot }) });
   assert.ok(fs.existsSync(path.join(root, 'box', 'cards', CARD_ID, 'REVIEW_NOTES.md')));
-  assert.ok(fs.existsSync(path.join(root, 'box', 'cards', CARD_ID, 'task.json')));
+  const task = JSON.parse(fs.readFileSync(path.join(root, 'box', 'cards', CARD_ID, 'task.json'), 'utf8'));
+  assert.match(task.message, /Repo: https:\/\/github\.com\/acme\//); // #2: not an empty Repo: line
 });
 
 test('a build failure aborts to status=failed and never opens a PR (§11)', async () => {

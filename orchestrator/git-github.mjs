@@ -31,7 +31,12 @@ export function createGitHub({ run, token, org, visibility }) {
       await git(cwd, ['commit', '-m', message]);
     },
 
-    diff: async (cwd) => (await git(cwd, ['diff', 'HEAD'])).stdout,
+    // Stage everything first so the diff includes NEW untracked files (Claude's scaffold
+    // output); a plain `git diff` would miss them and let secrets slip past the §12.5 scan.
+    async stagedDiff(cwd) {
+      await git(cwd, ['add', '-A']);
+      return (await git(cwd, ['diff', '--cached'])).stdout;
+    },
 
     async createRepo(slug) {
       await gh(undefined, ['repo', 'create', `${org}/${slug}`, `--${visibility}`]);

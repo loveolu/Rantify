@@ -14,20 +14,16 @@ import { slugFromTitle } from './slug.mjs';
 import { scanDiff } from './secret-scan.mjs';
 import { buildPrBody } from './pr-body.mjs';
 import { buildReviewNotes } from './review-notes.mjs';
+import { PhaseError, withRetry, fail } from './phase-common.mjs';
 
 const titleFromSpec = (spec) =>
   (spec.match(/^title:\s*["']?(.+?)["']?\s*$/m)?.[1] ?? 'devtool').trim();
-
-class PhaseError extends Error {}
-
-async function withRetry(fn) {
-  try { return await fn(); } catch { return await fn(); } // §11: push retries once
-}
 
 export async function phase1Scaffold(fileId, meta, deps) {
   const { box, gh, cc, build, workRoot, scaffoldPromptPath, now = () => new Date() } = deps;
   const cardId = meta.card_id;
   const repoDir = path.join(workRoot, cardId, 'repo');
+  let repoUrl = meta.repo_url;
 
   try {
     await box.setMetadata(fileId, { status: 'building' });
@@ -36,14 +32,14 @@ export async function phase1Scaffold(fileId, meta, deps) {
     const title = titleFromSpec(spec);
     const slug = slugFromTitle(title);
 
-    if (meta.repo_url == null) {
+    if (repoUrl == null) {
       fs.mkdirSync(path.join(repoDir, 'specs', 'devtool-loop'), { recursive: true });
       fs.writeFileSync(path.join(repoDir, 'specs', 'devtool-loop', 'spec.md'), spec);
       fs.writeFileSync(path.join(repoDir, 'package.json'),
         JSON.stringify({ name: slug, version: '0.0.0', private: true, devtool_build_card_id: cardId }, null, 2));
       await gh.init(repoDir);
       await gh.commitAll(repoDir, 'chore: add Build Card spec');
-      const repoUrl = await gh.createRepo(slug);
+      repoUrl = await gh.createRepo(slug);
       await gh.addRemoteAndPush(repoDir, repoUrl);
       await box.setMetadata(fileId, { repo_url: repoUrl });
     }
@@ -58,7 +54,8 @@ export async function phase1Scaffold(fileId, meta, deps) {
     if (!buildRes.pass) throw new PhaseError(`build failed:\n${buildRes.output}`);
     const testRes = await build.test(repoDir); // a failing test still goes to human review
 
-    const findings = scanDiff(await gh.diff(repoDir));
+    // §12.5: scan the STAGED diff so newly-created (untracked) scaffold files are included.
+    const findings = scanDiff(await gh.stagedDiff(repoDir));
     if (findings.length > 0) {
       throw new PhaseError(`secret(s) detected in diff: ${findings.map((f) => `${f.pattern}@${f.line}`).join(', ')}`);
     }
@@ -74,7 +71,7 @@ export async function phase1Scaffold(fileId, meta, deps) {
     await box.uploadArtifact({ cardId, name: 'REVIEW_NOTES.md', area: 'card',
       content: buildReviewNotes({ title, buildPass: buildRes.pass, testsPass: testRes.pass, aiNotes }) });
     const { taskId } = await box.createTask({ fileId,
-      message: `Review AI scaffold for: ${title}\nRepo: ${meta.repo_url ?? ''}\nPR: ${prUrl}` });
+      message: `Review AI scaffold for: ${title}\nRepo: ${repoUrl}\nPR: ${prUrl}` });
 
     await box.setMetadata(fileId, {
       box_task_id: taskId, phase: 'scaffold', last_run_at: now().toISOString(),
@@ -88,14 +85,3 @@ export async function phase1Scaffold(fileId, meta, deps) {
 }
 
 function readIfExists(p) { return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; }
-
-export async function fail(box, fileId, cardId, phase, err, now = () => new Date()) {
-  try {
-    await box.setMetadata(fileId, { status: 'failed' });
-    await box.uploadArtifact({ cardId, area: 'logs',
-      name: `${cardId}-${phase}-fail-${now().toISOString().replace(/[:.]/g, '-')}.log`,
-      content: `Phase ${phase} failed at ${now().toISOString()}\n\n${err?.stack ?? err}` });
-  } catch (logErr) {
-    console.error('[phase] failed to record failure:', logErr);
-  }
-}

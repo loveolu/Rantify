@@ -20,6 +20,7 @@ import { phase1Scaffold } from './phase1-scaffold.mjs';
 import { phase2Refine } from './phase2-refine.mjs';
 import { createWebhookServer } from './server.mjs';
 import { createPoller } from './poller.mjs';
+import { guardConcurrent } from './in-flight.mjs';
 
 const REPO_ROOT = path.join(import.meta.dirname, '..');
 const DEFAULT_PROMPTS = path.join(REPO_ROOT, 'specs', 'devtool-loop', 'prompts');
@@ -34,7 +35,10 @@ export function createOrchestrator({ box, config, run = realRun, workRoot, promp
 
   const phase1 = (fileId, meta) => phase1Scaffold(fileId, meta, { box, gh, cc, build, workRoot, scaffoldPromptPath: path.join(promptsDir, 'scaffold.md') });
   const phase2 = (fileId, meta) => phase2Refine(fileId, meta, { box, gh, cc, build, workRoot, refinePromptPath: path.join(promptsDir, 'refine.md') });
-  const onCard = (fileId) => handleCard(fileId, { box, phase1, phase2 });
+
+  // One guarded entrypoint shared by every trigger (webhook + poller), so at-least-once /
+  // racing duplicate deliveries for the same file are de-duped in-process (SPEC §8.5).
+  const onCard = guardConcurrent((fileId) => handleCard(fileId, { box, phase1, phase2 }));
 
   return { onCard, phase1, phase2 };
 }

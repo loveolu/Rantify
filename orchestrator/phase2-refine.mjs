@@ -13,10 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { scanDiff } from './secret-scan.mjs';
 import { buildReviewNotes } from './review-notes.mjs';
-import { fail } from './phase1-scaffold.mjs';
-
-class PhaseError extends Error {}
-const withRetry = async (fn) => { try { return await fn(); } catch { return await fn(); } };
+import { PhaseError, withRetry, fail } from './phase-common.mjs';
 
 export async function phase2Refine(fileId, meta, deps) {
   const { box, gh, cc, build, workRoot, refinePromptPath, now = () => new Date() } = deps;
@@ -51,17 +48,21 @@ export async function phase2Refine(fileId, meta, deps) {
     const testRes = await build.test(repoDir);
     if (!testRes.pass) throw new PhaseError(`tests failed — never auto-complete (§11):\n${testRes.output}`);
 
-    const findings = scanDiff(await gh.diff(repoDir));
+    // §12.5: scan the STAGED diff so untracked refine output is included.
+    const findings = scanDiff(await gh.stagedDiff(repoDir));
     if (findings.length > 0) throw new PhaseError(`secret(s) detected: ${findings.map((f) => f.pattern).join(', ')}`);
 
     await gh.commitAll(repoDir, 'feat: AI refine (phase 2)');
     await withRetry(() => gh.push(repoDir));
 
-    await box.setMetadata(fileId, { status: 'completed', last_run_at: now().toISOString(), tests_pass: true, build_pass: true });
+    // Do the fallible side-effects (summary, move) BEFORE the terminal status write, so a
+    // failure here routes to `failed` cleanly rather than reverting an already-`completed`
+    // card. setMetadata(completed) is last and irreversible.
     await box.uploadArtifact({ cardId, area: 'logs',
       name: `${cardId}-build-${now().toISOString().replace(/[:.]/g, '-')}.md`,
       content: buildReviewNotes({ title: cardId, buildPass: true, testsPass: true, sessionFallback }) });
     await box.moveCard(cardId, 'completed');
+    await box.setMetadata(fileId, { status: 'completed', last_run_at: now().toISOString(), tests_pass: true, build_pass: true });
     return { ok: true };
   } catch (err) {
     await fail(box, fileId, cardId, 'phase2', err, now);

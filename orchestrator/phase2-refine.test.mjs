@@ -12,7 +12,7 @@ const sampleSpec = fs.readFileSync(path.join(import.meta.dirname, '..', 'fixture
 function fakeGh({ diff = '', prComments = '' } = {}) {
   const calls = [];
   const rec = (n) => (...a) => { calls.push([n, ...a]); };
-  return { calls, commitAll: rec('commitAll'), push: rec('push'), async diff() { return diff; }, async prComments() { return prComments; } };
+  return { calls, commitAll: rec('commitAll'), push: rec('push'), async stagedDiff() { return diff; }, async prComments() { return prComments; } };
 }
 function fakeCc(results = [{ code: 0, stdout: '', stderr: '' }]) {
   const calls = []; let i = 0;
@@ -73,6 +73,17 @@ test('drops the Box REVIEW_NOTES + PR comments into the repo before refining (§
   await phase2Refine(fileId, meta, { box, ...deps({ workRoot, cc, gh }) });
   assert.match(notesAtRunTime, /add edge tests/);      // from the Box REVIEW_NOTES artifact
   assert.match(notesAtRunTime, /rename the flag/);      // from PR comments
+});
+
+test('moves the card BEFORE the terminal completed write (#3 — no completed→failed revert)', async () => {
+  const { box, fileId, meta, workRoot } = await setup();
+  const order = [];
+  const origMove = box.moveCard.bind(box);
+  const origSet = box.setMetadata.bind(box);
+  box.moveCard = async (...a) => { order.push('move'); return origMove(...a); };
+  box.setMetadata = async (id, patch) => { if (patch.status === 'completed') order.push('completed'); return origSet(id, patch); };
+  await phase2Refine(fileId, meta, { box, ...deps({ workRoot }) });
+  assert.deepEqual(order, ['move', 'completed'], 'move must precede the irreversible completed write');
 });
 
 test('build failure → status=failed, not completed (§11)', async () => {
