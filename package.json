@@ -7,8 +7,8 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "test": "node --test",
-    "test:orchestrator": "node --test orchestrator/",
+    "test": "node --test orchestrator/*.test.mjs",
+    "test:orchestrator": "node --test orchestrator/*.test.mjs",
     "verify:mock": "node contracts/verify-mock.mjs",
     "verify:orchestrator": "node orchestrator/verify-orchestrator.mjs"
   }
