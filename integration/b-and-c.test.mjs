@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fakeBox } from './fake-box.mjs';
 import { RealBoxClient } from '../box-hub/box-client-real.mjs';
 import { createOrchestrator } from '../orchestrator/index.mjs';
 import { loadConfig } from '../orchestrator/config.mjs';
@@ -20,36 +21,6 @@ import { makeStubRun } from '../orchestrator/stub-run.mjs';
 const CARD_ID = '550e8400-e29b-41d4-a716-446655440000';
 const sampleSpec = fs.readFileSync(path.join(import.meta.dirname, '..', 'fixtures', 'sample-spec.md'), 'utf8');
 const promptsDir = path.join(import.meta.dirname, '..', 'specs', 'devtool-loop', 'prompts');
-
-/** Minimal in-memory Box backing the real SDK surface RealBoxClient uses. */
-function fakeBox() {
-  let seq = 1; const id = (p) => `${p}_${seq++}`;
-  const folders = new Map([['0', { id: '0', name: 'root', parentId: null }]]);
-  const files = new Map(); const meta = new Map();
-  const kids = (pid) => [
-    ...[...folders.values()].filter((f) => f.parentId === pid).map((f) => ({ id: f.id, name: f.name, type: 'folder' })),
-    ...[...files.values()].filter((f) => f.parentId === pid).map((f) => ({ id: f.id, name: f.name, type: 'file' })),
-  ];
-  return {
-    folders: {
-      getFolderItems: async (fid) => ({ entries: kids(fid) }),
-      createFolder: async ({ name, parent }) => { const fid = id('folder'); folders.set(fid, { id: fid, name, parentId: parent.id }); return { id: fid, name, type: 'folder' }; },
-      updateFolderById: async (fid, b) => { folders.get(fid).parentId = b.parent.id; return { id: fid }; },
-    },
-    uploads: {
-      uploadFile: async ({ attributes, file }) => { const fid = id('file'); files.set(fid, { id: fid, name: attributes.name, parentId: attributes.parent.id, content: file.toString('utf8'), modified_at: new Date().toISOString() }); return { entries: [{ id: fid }] }; },
-      uploadFileVersion: async (fid, { file }) => { files.get(fid).content = file.toString('utf8'); return { entries: [{ id: fid }] }; },
-    },
-    downloads: { downloadFile: async (fid) => Buffer.from(files.get(fid).content, 'utf8') },
-    fileMetadata: {
-      createFileMetadataById: async (fid, _s, _t, v) => { meta.set(fid, { ...v }); },
-      getFileMetadataById: async (fid) => ({ extraData: { ...(meta.get(fid) ?? {}) } }),
-      updateFileMetadataById: async (fid, _s, _t, ops) => { const m = meta.get(fid) ?? {}; for (const o of ops) { const k = o.path.slice(1); if (o.op === 'remove') delete m[k]; else m[k] = o.value; } meta.set(fid, m); },
-    },
-    tasks: { createTask: async () => ({ id: id('task') }) },
-    search: { searchForContent: async () => ({ entries: [...files.values()].filter((f) => meta.has(f.id)).map((f) => ({ id: f.id, type: 'file', modified_at: f.modified_at, metadata: { enterprise: { devtool_build_card: meta.get(f.id) } } })) }) },
-  };
-}
 
 test('C orchestrator + B RealBoxClient: inbox → ready-for-build → building → approved → completed', async () => {
   const box = new RealBoxClient({ client: fakeBox() });

@@ -8,14 +8,19 @@
     "node": ">=20.11"
   },
   "scripts": {
-    "test": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs integration/*.test.mjs",
-    "test:orchestrator": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs integration/*.test.mjs",
+    "test": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs idea-miner/__tests__/*.test.mjs integration/*.test.mjs",
+    "test:orchestrator": "node --test orchestrator/*.test.mjs contracts/*.test.mjs box-hub/**/*.test.mjs idea-miner/__tests__/*.test.mjs integration/*.test.mjs",
     "verify:mock": "node contracts/verify-mock.mjs",
     "verify:orchestrator": "node orchestrator/verify-orchestrator.mjs",
     "verify:box": "node box-hub/verify-real.mjs",
+    "verify:idea": "node idea-miner/verify-pipeline.mjs",
     "setup:phase0": "node setup/phase0.mjs"
   },
   "dependencies": {
-    "box-typescript-sdk-gen": "^1.19.1"
+    "box-typescript-sdk-gen": "^1.19.1",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "fast-check": "^3.22.0"
   }
 }
