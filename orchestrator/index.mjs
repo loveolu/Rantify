@@ -21,6 +21,7 @@ import { phase2Refine } from './phase2-refine.mjs';
 import { createWebhookServer } from './server.mjs';
 import { createPoller } from './poller.mjs';
 import { guardConcurrent } from './in-flight.mjs';
+import { safeError } from './phase-common.mjs';
 import { createTokenStore } from './auth/token-store.mjs';
 import { createGitHubOAuth } from './auth/github-oauth.mjs';
 import { createApi } from './api.mjs';
@@ -80,5 +81,5 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('index.mjs')) {
-  main().catch((err) => { console.error(err); process.exit(1); });
+  main().catch((err) => { console.error(safeError(err)); process.exit(1); });
 }

@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { scanDiff } from './secret-scan.mjs';
 import { buildReviewNotes } from './review-notes.mjs';
-import { PhaseError, withRetry, fail } from './phase-common.mjs';
+import { PhaseError, withRetry, fail, safeError } from './phase-common.mjs';
 
 export async function phase2Refine(fileId, meta, deps) {
   const { box, gh, cc, build, workRoot, refinePromptPath, now = () => new Date() } = deps;
@@ -86,6 +86,6 @@ async function reinjectContext(box, fileId, repoDir) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'spec.md'), spec);
   } catch (err) {
-    console.error('[phase2] re-inject failed:', err);
+    console.error('[phase2] re-inject failed:', safeError(err));
   }
 }
