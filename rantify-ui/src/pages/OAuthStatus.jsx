@@ -6,16 +6,20 @@ const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 
 export default function OAuthStatus() {
   const [connections, setConnections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
   const [email, setEmail] = useState('');
 
   useEffect(() => {
     api('/api/auth/status')
       .then((data) => setConnections(data.connections || []))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   function startOAuth() {
-    if (!email.trim()) return;
+    if (!email.trim() || connecting) return;
+    setConnecting(true);
     window.location.href = `${BACKEND_URL}/auth/github/login?email=${encodeURIComponent(email.trim())}`;
   }
 
@@ -34,9 +38,9 @@ export default function OAuthStatus() {
         </div>
         <p className="sub">Authorize Rantify to branch, push, and open PRs. Scoped per developer — revoke anytime from GitHub.</p>
         <div className="oauth-connect">
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" />
-          <button className="btn btn-accent" onClick={startOAuth} disabled={!email.trim()}>
-            Connect GitHub <IconArrow className="arrow" />
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" disabled={connecting} />
+          <button className="btn btn-accent" onClick={startOAuth} disabled={!email.trim() || connecting}>
+            {connecting ? <><span className="spinner" /> Redirecting…</> : <>Connect GitHub <IconArrow className="arrow" /></>}
           </button>
         </div>
       </div>
@@ -52,22 +56,24 @@ export default function OAuthStatus() {
 
       <div className="panel">
         <div className="panel-head"><h2 style={{ fontSize: 18 }}>Connected developers</h2></div>
-        {connections.length === 0
-          ? <div className="empty-state">No GitHub accounts connected yet. Add the first one above.</div>
-          : (
-            <ul className="connections">
-              {connections.map((c) => (
-                <li key={c.email}>
-                  <span className="conn-avatar">{(c.login || c.email || '?')[0].toUpperCase()}</span>
-                  <span>
-                    <span className="conn-email">{c.email}</span><br />
-                    <span className="conn-login">@{c.login}</span>
-                  </span>
-                  <span className="conn-status connected">Connected</span>
-                </li>
-              ))}
-            </ul>
-          )}
+        {loading
+          ? <div className="loading"><span className="pulse" /> Loading connected accounts…</div>
+          : connections.length === 0
+            ? <div className="empty-state">No GitHub accounts connected yet. Add the first one above.</div>
+            : (
+              <ul className="connections">
+                {connections.map((c) => (
+                  <li key={c.email}>
+                    <span className="conn-avatar">{(c.login || c.email || '?')[0].toUpperCase()}</span>
+                    <span>
+                      <span className="conn-email">{c.email}</span><br />
+                      <span className="conn-login">@{c.login}</span>
+                    </span>
+                    <span className="conn-status connected">Connected</span>
+                  </li>
+                ))}
+              </ul>
+            )}
       </div>
     </div>
   );

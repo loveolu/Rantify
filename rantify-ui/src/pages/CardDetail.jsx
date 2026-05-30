@@ -18,6 +18,7 @@ export default function CardDetail() {
   const [card, setCard] = useState(null);
   const [spec, setSpec] = useState('');
   const [error, setError] = useState(null);
+  const [changingStatus, setChangingStatus] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -29,8 +30,10 @@ export default function CardDetail() {
   }, [fileId]);
 
   async function changeStatus(status) {
+    if (changingStatus) return;
+    setChangingStatus(status);
     try { await api(`/api/cards/${fileId}`, { method: 'PUT', body: JSON.stringify({ status }) }); navigate(0); }
-    catch (err) { alert(`Failed: ${err.message}`); }
+    catch (err) { alert(`Failed: ${err.message}`); setChangingStatus(null); }
   }
 
   if (error) return <div className="error">{error}</div>;
@@ -81,7 +84,9 @@ export default function CardDetail() {
           <h2>Move this card</h2>
           <div className="actions">
             {allowed.map((a) => (
-              <button key={a.status} className={`btn ${a.variant}`} onClick={() => changeStatus(a.status)}>{a.label}</button>
+              <button key={a.status} className={`btn ${a.variant}`} onClick={() => changeStatus(a.status)} disabled={changingStatus !== null}>
+                {changingStatus === a.status ? <><span className="spinner" /> Moving…</> : a.label}
+              </button>
             ))}
           </div>
         </section>
