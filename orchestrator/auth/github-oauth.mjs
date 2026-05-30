@@ -79,8 +79,8 @@ export function createGitHubOAuth({ clientId, clientSecret, tokenStore, redirect
   return {
     loginHandler,
     callbackHandler,
-    matchesLogin(url) { return url === '/auth/github/login'; },
-    matchesCallback(url) { return url === '/auth/github/callback'; },
+    matchesLogin(url) { return url.split('?')[0] === '/auth/github/login'; },
+    matchesCallback(url) { return url.split('?')[0] === '/auth/github/callback'; },
   };
 }
 

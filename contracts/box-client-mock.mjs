@@ -165,6 +165,15 @@ export class FileSystemBoxClient /* extends BoxClient (duck-typed to avoid impor
     return out;
   }
 
+  async listCardsWithMetadata() {
+    const out = [];
+    for (const cardId of this._listCardIds()) {
+      const meta = this._readMeta(cardId);
+      if (meta) out.push({ fileId: meta._fileId, cardId, metadata: this._publicMeta(meta) });
+    }
+    return out;
+  }
+
   // ---- Webhook (Person B wires real; mock fires in-process) ----
 
   onWebhook(handler) {

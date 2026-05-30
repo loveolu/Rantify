@@ -39,4 +39,15 @@ export async function listCardsByStatus(client, status, rootFolderId) {
   return entries.filter((e) => instanceOf(e).status === status).map(toRef);
 }
 
+/** Every Build Card with full metadata (dashboard API). */
+export async function listCardsWithMetadata(client, rootFolderId) {
+  const res = await client.search.searchForContent({
+    ancestorFolderIds: [rootFolderId],
+    mdfilters: [{ scope: SCOPE, templateKey: TEMPLATE, filters: [] }],
+  });
+  return (res.entries ?? [])
+    .filter((e) => instanceOf(e))
+    .map((e) => ({ fileId: e.id, cardId: instanceOf(e).card_id, metadata: instanceOf(e) }));
+}
+
 export const ROOT_FOLDER_NAME = ROOT;

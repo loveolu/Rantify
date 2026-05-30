@@ -12,7 +12,7 @@ function mockRes() {
   const parts = [];
   return {
     _parts: parts,
-    writeHead(s, h) { parts.push({ status: s, headers: h }); },
+    writeHead(s, h) { parts.push({ status: s, headers: h }); return this; },
     end(body) { parts.push({ body }); },
   };
 }
@@ -101,6 +101,6 @@ test('full OAuth flow with mocked HTTPS calls', { timeout: 10000 }, async () => 
   // Since we can't easily mock https.request, verify the pre-token-exchange logic
   const cbRes = mockRes();
   await oauth.callbackHandler(mockReq('/auth/github/callback?code=bad&state=bob@x.com'), cbRes);
-  // Falls through because the token fetch will fail on real GitHub
-  assert.equal(cbRes._parts[0].status, 500);
+  // Falls through — GitHub returns error (no access_token), handler returns 400
+  assert.equal(cbRes._parts[0].status, 400);
 });

@@ -36,6 +36,14 @@
  * @property {string|null} repo_url           set by Orchestrator only
  * @property {string|null} pr_url             set by Orchestrator only
  * @property {string|null} [box_task_id]      set by Orchestrator only
+ * @property {string|null} creator_email      set by UI / Idea Miner
+ */
+
+/**
+ * @typedef {Object} CardWithMetadata
+ * @property {string} fileId
+ * @property {string} cardId
+ * @property {CardMetadata} metadata
  */
 
 /**
@@ -140,7 +148,13 @@ export class BoxClient {
    * @param {CardStatus} status
    * @returns {Promise<CardRef[]>}
    */
-  async listCardsByStatus(status) { throw new Error('not implemented: listCardsByStatus'); }
+   async listCardsByStatus(status) { throw new Error('not implemented: listCardsByStatus'); }
+
+  /**
+   * Return every Build Card with its full metadata (for the dashboard).
+   * @returns {Promise<CardWithMetadata[]>}
+   */
+  async listCardsWithMetadata() { throw new Error('not implemented: listCardsWithMetadata'); }
 
   /* ---- Box Hub (Person B) wires this for the Orchestrator ---- */
 

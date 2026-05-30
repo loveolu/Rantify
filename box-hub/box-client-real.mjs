@@ -12,7 +12,7 @@ import { ensureFolderTree, ensureCardFolder, moveFolder } from './lib/folders.mj
 import { uploadText, downloadText } from './lib/files.mjs';
 import { applyMetadata, getCardMetadata, patchMetadata } from './lib/metadata.mjs';
 import { createApprovalTask } from './lib/tasks.mjs';
-import { findDuplicate, listCardsByStatus } from './lib/search.mjs';
+import { findDuplicate, listCardsByStatus, listCardsWithMetadata as searchCardsWithMetadata } from './lib/search.mjs';
 import { createRegistry } from './webhook/registry.mjs';
 
 const STATUS_SUBFOLDERS = ['Inbox', 'Ready-for-Build', 'In-Progress', 'Completed'];
@@ -93,6 +93,7 @@ export class RealBoxClient extends BoxClient {
   }
 
   async listCardsByStatus(status) { return listCardsByStatus(this._client, status, await this._rootId()); }
+  async listCardsWithMetadata() { return searchCardsWithMetadata(this._client, await this._rootId()); }
 
   // ---- Webhook (real server dispatches into this registry) ----
 
