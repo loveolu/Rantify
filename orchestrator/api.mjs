@@ -36,7 +36,7 @@ export function createApi({ box, tokenStore }) {
   async function createCard(req, res) {
     const body = await readJson(req);
     const cardId = body.card_id ?? randomUUID();
-    const specMarkdown = buildSpec(body);
+    const specMarkdown = buildSpec(body, cardId);
     const metadata = {
       status: 'inbox',
       theme: body.theme,
@@ -124,16 +124,41 @@ function readJson(req) {
   });
 }
 
-function buildSpec(body) {
+function buildSpec(body, cardId) {
   const theme = body.theme ?? 'untitled';
+  const title = body.title ?? body.theme ?? 'Untitled dev tool';
   const description = body.description ?? '';
   const score = body.pain_score ?? 0.5;
+  const now = new Date().toISOString();
+  // id MUST equal the card's metadata card_id (SPEC §5.3 sync invariant / §12.1 traceability).
   return `---
-id: ${randomUUID()}
+id: "${cardId}"
+schema_version: "1"
+created_at: "${now}"
+updated_at: "${now}"
+title: "${title.replace(/"/g, "'")}"
 theme: ${theme}
+status: "inbox"
 signal_strength:
   score: ${score}
+builder:
+  session_id: null
+  repo_url: null
+  pr_url: null
+  box_task_id: null
+  phase: null
+  last_run_at: null
+  tests_pass: null
+  build_pass: null
 ---
+
+# ${title.replace(/[\r\n]/g, ' ')}
+
+## Problem Summary
 ${description}
+
+## Acceptance Criteria
+- [ ] Implements the tool described above.
+- [ ] Includes a README and basic tests.
 `;
 }
