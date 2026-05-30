@@ -1,0 +1,15 @@
+{
+  "name": "devtool-loop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "test": "node --test",
+    "test:orchestrator": "node --test orchestrator/",
+    "verify:mock": "node contracts/verify-mock.mjs",
+    "verify:orchestrator": "node orchestrator/verify-orchestrator.mjs"
+  }
+}
