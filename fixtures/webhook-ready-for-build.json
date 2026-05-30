@@ -1,0 +1,14 @@
+{
+  "_comment": "Fake Box webhook (SPEC.md §10.2) fired when a human sets status=ready-for-build. Person C: feed this to your POST /webhooks/box handler. source.id is the Box file id, NOT the card UUID — re-fetch metadata with getMetadata(source.id), never trust this body (§8.2).",
+  "trigger": "METADATA_INSTANCE.UPDATED",
+  "source": { "id": "file_REPLACE_WITH_REAL_FILE_ID", "type": "file" },
+  "additional_info": {
+    "metadata_instance": {
+      "template_key": "devtool_build_card",
+      "data": {
+        "status": "ready-for-build",
+        "card_id": "550e8400-e29b-41d4-a716-446655440000"
+      }
+    }
+  }
+}
