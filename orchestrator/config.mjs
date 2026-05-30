@@ -9,16 +9,15 @@
 const TRUE_VALUES = new Set(['1', 'true', 'yes']);
 const VISIBILITIES = new Set(['private', 'public']);
 
-/** Vars required only when really talking to GitHub / Box / Claude. */
+/** Vars required only when really talking to Box / Claude. */
 const EXTERNAL_REQUIRED = [
-  'GITHUB_TOKEN',
   'BOX_WEBHOOK_PRIMARY_KEY',
   'BOX_WEBHOOK_SECONDARY_KEY',
   'BEDROCK_MODEL_ID',
 ];
 
-/** Vars always required (orchestrator can't route or name repos without them). */
-const ALWAYS_REQUIRED = ['GITHUB_ORG'];
+/** Vars always required (currently none — GITHUB_ORG/GITHUB_TOKEN are optional fallbacks). */
+const ALWAYS_REQUIRED = [];
 
 /**
  * @param {Record<string, string|undefined>} [env]

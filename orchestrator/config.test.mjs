@@ -29,7 +29,7 @@ test('defaults GITHUB_REPO_VISIBILITY to private (SPEC §13, Decision #5)', () =
 });
 
 test('throws listing every missing required var in real mode', () => {
-  assert.throws(() => loadConfig({}), /BEDROCK_MODEL_ID|GITHUB_TOKEN|BOX_WEBHOOK/);
+  assert.throws(() => loadConfig({}), /BEDROCK_MODEL_ID|BOX_WEBHOOK/);
 });
 
 test('ORCH_STUB_EXTERNALS=1 relaxes external creds and sets stubExternals', () => {

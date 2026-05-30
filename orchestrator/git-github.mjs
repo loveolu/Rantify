@@ -56,6 +56,7 @@ export function createGitHub({ run, token, org, visibility, getToken }) {
      */
     async createRepo(slug, email) {
       const user = userInfo(email);
+      if (!user && !org) throw new Error('No GitHub owner configured: set GITHUB_ORG env or connect via OAuth');
       const owner = user ? user.login : org;
       const userToken = user?.token;
       await gh(undefined, ['repo', 'create', `${owner}/${slug}`, `--${visibility}`], userToken);
