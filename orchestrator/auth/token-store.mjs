@@ -1,7 +1,9 @@
 /**
  * token-store.mjs — GitHub OAuth token store, persisted as a JSON file.
  *
- * Maps email → { token, login }. Reads on construction, writes on every mutation.
+ * Maps email → { token, login, target? }. `target` (optional) records WHERE the build
+ * loop should publish this user's work (personal / org / existing repo) — see targets.mjs.
+ * Reads on construction, writes on every mutation.
  * Safe to use across multiple requests (sync I/O for simplicity at this scale).
  */
 
@@ -30,11 +32,23 @@ export function createTokenStore({ filePath = path.join(process.cwd(), '.github-
   load();
 
   return {
-    /** @param {string} email @returns {{token:string, login:string}|undefined} */
+    /** @param {string} email @returns {{token:string, login:string, target?:object}|undefined} */
     get(email) { return data[email]; },
 
-    /** @param {string} email @param {{token:string, login:string}} entry */
+    /** @param {string} email @param {{token:string, login:string, target?:object}} entry */
     set(email, entry) { data[email] = entry; save(); },
+
+    /**
+     * Update only the build target for an already-connected user (no re-auth).
+     * @param {string} email @param {object} target
+     * @returns {boolean} false if the email isn't connected
+     */
+    setTarget(email, target) {
+      if (!(email in data)) return false;
+      data[email] = { ...data[email], target };
+      save();
+      return true;
+    },
 
     /** @param {string} email @returns {boolean} */
     has(email) { return email in data; },

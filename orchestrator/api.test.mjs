@@ -7,6 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { FileSystemBoxClient } from '../contracts/box-client-mock.mjs';
 import { createApi } from './api.mjs';
+import { createTokenStore } from './auth/token-store.mjs';
 
 let server, base, box;
 before(async () => {
@@ -80,5 +81,27 @@ test('POST /api/mine → 400 when query is missing', async () => {
   const b = `http://127.0.0.1:${srv.address().port}`;
   const res = await fetch(`${b}/api/mine`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}) });
   assert.equal(res.status, 400);
+  srv.close();
+});
+
+test('POST /api/auth/target updates a connected user and surfaces in /api/auth/status', async () => {
+  const tokenStore = createTokenStore({ filePath: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'tok-')), 't.json') });
+  tokenStore.set('dev@x.com', { token: 'ghp', login: 'dev' });
+  const srv = http.createServer(createApi({ box, tokenStore }));
+  await new Promise((r) => srv.listen(0, r));
+  const b = `http://127.0.0.1:${srv.address().port}`;
+
+  const ok = await fetch(`${b}/api/auth/target`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'dev@x.com', target: 'repo:acme/tool' }) });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).target, 'repo:acme/tool');
+
+  const { connections } = await (await fetch(`${b}/api/auth/status`)).json();
+  assert.equal(connections.find((c) => c.email === 'dev@x.com').target, 'repo:acme/tool');
+
+  const bad = await fetch(`${b}/api/auth/target`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'dev@x.com', target: 'repo:nope' }) });
+  assert.equal(bad.status, 400);
+
+  const missing = await fetch(`${b}/api/auth/target`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email: 'ghost@x.com', target: 'org:acme' }) });
+  assert.equal(missing.status, 404);
   srv.close();
 });

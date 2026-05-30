@@ -447,10 +447,17 @@ input[type=range] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .panel-head .gh { display: inline-flex; width: 36px; height: 36px; border-radius: var(--radius); background: var(--text); align-items: center; justify-content: center; color: var(--surface); flex: none; }
 .panel-head h2 { font-size: 17px; font-weight: 600; }
 .panel .sub { font-size: 14px; color: var(--text-2); margin-bottom: 16px; line-height: 1.55; }
+.oauth-target { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.oauth-target .field { display: flex; flex-direction: column; gap: 4px; }
+.oauth-target .field > span { font-size: 13px; color: var(--text-2); }
+.oauth-target select, .oauth-target input { padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius); font-family: inherit; font-size: 14px; background: var(--surface); color: var(--text); }
+.field-error { color: var(--danger, #d33); font-size: 13px; margin-top: 8px; }
+.field-hint { color: var(--text-2); font-size: 12.5px; line-height: 1.5; margin-top: 2px; }
 .oauth-connect { display: flex; gap: 8px; }
 .oauth-connect input { flex: 1; }
 .connections { list-style: none; display: flex; flex-direction: column; }
 .connections li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.connections li > span:nth-child(2) { flex: 1; }
 .connections li:last-child { border-bottom: none; }
 .conn-avatar { display: inline-flex; width: 32px; height: 32px; border-radius: 50%; background: var(--accent-light); color: var(--accent); align-items: center; justify-content: center; font-weight: 600; font-size: 13px; flex: none; }
 .conn-email { font-size: 14px; color: var(--text); font-weight: 500; }

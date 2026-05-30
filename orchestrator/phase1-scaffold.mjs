@@ -33,14 +33,23 @@ export async function phase1Scaffold(fileId, meta, deps) {
     const slug = slugFromTitle(title);
 
     if (repoUrl == null) {
-      fs.mkdirSync(path.join(repoDir, 'specs', 'devtool-loop'), { recursive: true });
-      fs.writeFileSync(path.join(repoDir, 'specs', 'devtool-loop', 'spec.md'), spec);
-      fs.writeFileSync(path.join(repoDir, 'package.json'),
-        JSON.stringify({ name: slug, version: '0.0.0', private: true, devtool_build_card_id: cardId }, null, 2));
-      await gh.init(repoDir);
-      await gh.commitAll(repoDir, 'chore: add Build Card spec');
-      repoUrl = await gh.createRepo(slug, meta.creator_email);
-      await gh.addRemoteAndPush(repoDir, repoUrl, meta.creator_email);
+      const target = gh.resolveTarget?.(meta.creator_email);
+      if (target?.kind === 'repo') {
+        // Existing-repo target: clone it, branch off, drop the spec in, push the branch.
+        // The AI scaffold + later push/PR run against this feature branch (PR base = default branch).
+        repoUrl = await gh.cloneExisting(repoDir, meta.creator_email);
+        await gh.checkoutBranch(repoDir, `devtool/${slug}`);
+        writeSpec(repoDir, spec, slug, cardId);
+        await gh.commitAll(repoDir, 'chore: add Build Card spec');
+        await gh.pushBranch(repoDir, `devtool/${slug}`);
+      } else {
+        // New-repo target (personal / org): scaffold a fresh repo and push main.
+        writeSpec(repoDir, spec, slug, cardId);
+        await gh.init(repoDir);
+        await gh.commitAll(repoDir, 'chore: add Build Card spec');
+        repoUrl = await gh.createRepo(slug, meta.creator_email);
+        await gh.addRemoteAndPush(repoDir, repoUrl, meta.creator_email);
+      }
       await box.setMetadata(fileId, { repo_url: repoUrl });
     }
 
@@ -85,3 +94,17 @@ export async function phase1Scaffold(fileId, meta, deps) {
 }
 
 function readIfExists(p) { return fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : ''; }
+
+/**
+ * Drop the Build Card spec into the repo. Writes package.json only when the repo
+ * doesn't already have one, so an EXISTING target repo's manifest is never clobbered.
+ */
+function writeSpec(repoDir, spec, slug, cardId) {
+  fs.mkdirSync(path.join(repoDir, 'specs', 'devtool-loop'), { recursive: true });
+  fs.writeFileSync(path.join(repoDir, 'specs', 'devtool-loop', 'spec.md'), spec);
+  const pkgPath = path.join(repoDir, 'package.json');
+  if (!fs.existsSync(pkgPath)) {
+    fs.writeFileSync(pkgPath,
+      JSON.stringify({ name: slug, version: '0.0.0', private: true, devtool_build_card_id: cardId }, null, 2));
+  }
+}

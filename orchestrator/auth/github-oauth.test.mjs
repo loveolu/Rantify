@@ -36,11 +36,34 @@ test('login handler redirects to GitHub', () => {
   assert.match(loc, /state=alice%40x\.com/);
 });
 
+test('login handler carries a valid target through (still 302, state=email)', () => {
+  const oauth = createGitHubOAuth({ clientId: 'cid', clientSecret: 'cs', tokenStore: createTokenStore(), redirectUri: 'http://localhost:8080/auth/github/callback' });
+  const res = mockRes();
+  oauth.loginHandler(mockReq('/auth/github/login?email=alice@x.com&target=repo:acme/tool'), res);
+  assert.equal(res._parts[0].status, 302);
+  assert.match(res._parts[0].headers.Location, /state=alice%40x\.com/);
+});
+
+test('login handler rejects a malformed target', () => {
+  const oauth = createGitHubOAuth({ clientId: 'cid', clientSecret: 'cs', tokenStore: createTokenStore(), redirectUri: 'http://localhost:8080/auth/github/callback' });
+  const res = mockRes();
+  oauth.loginHandler(mockReq('/auth/github/login?email=alice@x.com&target=repo:nope'), res);
+  assert.equal(res._parts[0].status, 400);
+});
+
 test('callback handler rejects missing code or state', async () => {
   const oauth = createGitHubOAuth({ clientId: 'id', clientSecret: 's', tokenStore: createTokenStore() });
   const res = mockRes();
   await oauth.callbackHandler(mockReq('/auth/github/callback'), res);
   assert.equal(res._parts[0].status, 400);
+});
+
+test('callback handler shows a friendly page when the user cancels (error param)', async () => {
+  const oauth = createGitHubOAuth({ clientId: 'id', clientSecret: 's', tokenStore: createTokenStore() });
+  const res = mockRes();
+  await oauth.callbackHandler(mockReq('/auth/github/callback?error=access_denied&error_description=The+user+denied&state=alice@x.com'), res);
+  assert.equal(res._parts[0].status, 200);
+  assert.match(res._parts[1].body, /cancelled/i);
 });
 
 test('callback handler rejects unknown state', async () => {

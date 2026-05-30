@@ -1,15 +1,17 @@
 /**
  * github-oauth.mjs — GitHub OAuth login/callback HTTP handlers.
  *
- * GET /auth/github/login?email=user@example.com
- *   → redirects to GitHub authorization page with state=email
+ * GET /auth/github/login?email=user@example.com&target=org:acme
+ *   → redirects to GitHub authorization page with state=email; the chosen build
+ *     target (personal / org / existing repo) is remembered until the callback.
  *
  * GET /auth/github/callback?code=xxx&state=user@example.com
- *   → exchanges code for token, stores it keyed by email, redirects to success page
+ *   → exchanges code for token, stores it keyed by email (with target), redirects to success page
  */
 
 import https from 'node:https';
 import { URL, URLSearchParams } from 'node:url';
+import { parseTarget, describeTarget } from './targets.mjs';
 
 const GITHUB_AUTHORIZE = 'https://github.com/login/oauth/authorize';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
@@ -20,7 +22,8 @@ const SCOPES = 'repo';
  * @param {{clientId:string, clientSecret:string, tokenStore:ReturnType<typeof import('./token-store.mjs').createTokenStore>, redirectUri?:string}} deps
  */
 export function createGitHubOAuth({ clientId, clientSecret, tokenStore, redirectUri }) {
-  const state = new Set();
+  // email -> { target } pending between login redirect and callback.
+  const state = new Map();
 
   function loginHandler(req, res) {
     const u = new URL(req.url, `http://${req.headers.host}`);
@@ -29,7 +32,14 @@ export function createGitHubOAuth({ clientId, clientSecret, tokenStore, redirect
       res.writeHead(400).end('Missing ?email= parameter');
       return;
     }
-    state.add(email);
+    let target;
+    try {
+      target = parseTarget(u.searchParams.get('target'));
+    } catch (err) {
+      res.writeHead(400).end(`Invalid ?target= parameter: ${err.message}`);
+      return;
+    }
+    state.set(email, { target });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -43,10 +53,25 @@ export function createGitHubOAuth({ clientId, clientSecret, tokenStore, redirect
     const u = new URL(req.url, `http://${req.headers.host}`);
     const code = u.searchParams.get('code');
     const email = u.searchParams.get('state');
+    const oauthError = u.searchParams.get('error');
+
+    // User clicked "Cancel" on GitHub, or GitHub returned an error → friendly page, not a 400.
+    if (oauthError) {
+      if (email) state.delete(email);
+      const desc = u.searchParams.get('error_description') || oauthError;
+      res.writeHead(200, { 'Content-Type': 'text/html' }).end(`<!DOCTYPE html>
+<html><body><h1>GitHub connection cancelled</h1>
+<p>${escapeHtml(desc)}</p>
+<p>You can close this window and try again from the DevTool app.</p>
+</body></html>`);
+      return;
+    }
+
     if (!code || !email || !state.has(email)) {
       res.writeHead(400).end('Invalid OAuth callback parameters');
       return;
     }
+    const pending = state.get(email);
     state.delete(email);
 
     try {
@@ -64,11 +89,15 @@ export function createGitHubOAuth({ clientId, clientSecret, tokenStore, redirect
       }
 
       const login = await fetchUserLogin(tokenRes.access_token);
-      tokenStore.set(email, { token: tokenRes.access_token, login });
+      // Preserve any previously-saved target if this re-auth didn't carry one.
+      const target = pending?.target ?? tokenStore.get(email)?.target ?? { kind: 'personal' };
+      tokenStore.set(email, { token: tokenRes.access_token, login, target });
+      const targetLine = describeTarget(target);
       res.writeHead(200, { 'Content-Type': 'text/html' }).end(`<!DOCTYPE html>
 <html><body><h1>GitHub connected</h1>
 <p>Account: <strong>${login}</strong></p>
 <p>Email: <strong>${email}</strong></p>
+<p>Build target: <strong>${targetLine}</strong></p>
 <p>You can close this window and return to the DevTool app.</p>
 </body></html>`);
     } catch (err) {
@@ -82,6 +111,11 @@ export function createGitHubOAuth({ clientId, clientSecret, tokenStore, redirect
     matchesLogin(url) { return url.split('?')[0] === '/auth/github/login'; },
     matchesCallback(url) { return url.split('?')[0] === '/auth/github/callback'; },
   };
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function fetchToken(body) {

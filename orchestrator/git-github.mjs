@@ -37,7 +37,20 @@ export function createGitHub({ run, token, org, visibility, getToken }) {
     return entry;
   }
 
+  /**
+   * Resolve the build target for an email into a concrete shape the caller can branch on.
+   * @returns {{kind:'personal'|'org'|'repo', owner?:string, repo?:string, login:string, token:string}|null}
+   */
+  function resolveTarget(email) {
+    const user = userInfo(email);
+    if (!user) return null;
+    const target = user.target ?? { kind: 'personal' };
+    return { ...target, login: user.login, token: user.token };
+  }
+
   return {
+    resolveTarget,
+
     init: (cwd) => git(cwd, ['init']),
 
     async commitAll(cwd, message) {
@@ -51,26 +64,55 @@ export function createGitHub({ run, token, org, visibility, getToken }) {
     },
 
     /**
+     * Create a NEW repo for the build. Honors the user's target:
+     *   - org      → create under that organization (with the user's token)
+     *   - personal → create under the user's login (or the configured org as a fallback)
+     *   - repo     → no creation; returns the existing repo URL (caller should clone instead)
      * @param {string} slug
-     * @param {string} [email] — if set, creates repo under the user's personal GitHub
+     * @param {string} [email]
      */
     async createRepo(slug, email) {
-      const user = userInfo(email);
-      if (!user && !org) throw new Error('No GitHub owner configured: set GITHUB_ORG env or connect via OAuth');
-      const owner = user ? user.login : org;
-      const userToken = user?.token;
+      const t = resolveTarget(email);
+      if (t?.kind === 'repo') return `https://github.com/${t.owner}/${t.repo}`;
+
+      let owner, userToken;
+      if (t?.kind === 'org') { owner = t.org; userToken = t.token; }
+      else if (t) { owner = t.login; userToken = t.token; }
+      else if (org) { owner = org; userToken = undefined; }
+      else throw new Error('No GitHub owner configured: set GITHUB_ORG env or connect via OAuth');
+
       await gh(undefined, ['repo', 'create', `${owner}/${slug}`, `--${visibility}`], userToken);
       return `https://github.com/${owner}/${slug}`;
     },
 
     /**
+     * Clone an EXISTING target repo into `repoDir` over an authenticated HTTPS URL.
+     * @param {string} repoDir absolute destination directory (must not already exist)
+     * @param {string} email
+     * @returns {Promise<string>} the public repo URL
+     */
+    async cloneExisting(repoDir, email) {
+      const t = resolveTarget(email);
+      if (t?.kind !== 'repo') throw new Error('cloneExisting requires a connected user with a repo target');
+      const authed = `https://x-access-token:${t.token}@github.com/${t.owner}/${t.repo}`;
+      await git(undefined, ['clone', authed, repoDir]);
+      return `https://github.com/${t.owner}/${t.repo}`;
+    },
+
+    /** Create and switch to a new branch in an existing checkout. */
+    checkoutBranch: (cwd, branch) => git(cwd, ['checkout', '-b', branch]),
+
+    /** Push the current branch upstream (origin already set by clone). */
+    pushBranch: (cwd, branch) => git(cwd, ['push', '-u', 'origin', branch]),
+
+    /**
      * @param {string} cwd
-     * @param {string} url
+     * @param {string} url repo URL returned by createRepo (correct owner already baked in)
      * @param {string} [email] — if set, embeds the user's token in the remote URL
      */
     async addRemoteAndPush(cwd, url, email) {
       const user = userInfo(email);
-      const remoteUrl = user ? `https://x-access-token:${user.token}@github.com/${user.login}/${url.split('/').pop()}` : url;
+      const remoteUrl = user ? url.replace('https://', `https://x-access-token:${user.token}@`) : url;
       await git(cwd, ['remote', 'add', 'origin', remoteUrl]);
       await git(cwd, ['push', '-u', 'origin', 'main']);
     },

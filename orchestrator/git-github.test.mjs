@@ -120,3 +120,55 @@ test('createPr with email uses user token', async () => {
   await gh.createPr('/r', { title: 'PR', bodyFile: 'b.md' }, 'alice@x.com');
   assert.equal(run.calls[0].opts.env.GH_TOKEN, 'ghp_user');
 });
+
+test('createRepo with an org target creates under the org using the user token', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'ghp_user', login: 'alice', target: { kind: 'org', org: 'globex' } });
+  const url = await createGitHub({ run, ...cfg, getToken }).createRepo('tool', 'alice@x.com');
+  const c = run.calls[0];
+  assert.ok(c.args.includes('globex/tool'));
+  assert.equal(c.opts.env.GH_TOKEN, 'ghp_user');
+  assert.equal(url, 'https://github.com/globex/tool');
+});
+
+test('createRepo with a repo target returns the existing url and never calls gh repo create', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'ghp_user', login: 'alice', target: { kind: 'repo', owner: 'globex', repo: 'flaky' } });
+  const url = await createGitHub({ run, ...cfg, getToken }).createRepo('ignored-slug', 'alice@x.com');
+  assert.equal(url, 'https://github.com/globex/flaky');
+  assert.equal(run.calls.length, 0); // no gh invocation — we clone instead
+});
+
+test('cloneExisting clones the target over an authed URL and returns the public url', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'ghp_user', login: 'alice', target: { kind: 'repo', owner: 'globex', repo: 'flaky' } });
+  const url = await createGitHub({ run, ...cfg, getToken }).cloneExisting('/tmp/repo', 'alice@x.com');
+  const c = run.calls[0];
+  assert.equal(c.cmd, 'git');
+  assert.equal(c.args[0], 'clone');
+  assert.match(c.args[1], /x-access-token:ghp_user@github\.com\/globex\/flaky/);
+  assert.equal(c.args[2], '/tmp/repo');
+  assert.equal(url, 'https://github.com/globex/flaky');
+});
+
+test('cloneExisting refuses a non-repo target', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'u', login: 'alice', target: { kind: 'org', org: 'globex' } });
+  await assert.rejects(createGitHub({ run, ...cfg, getToken }).cloneExisting('/r', 'alice@x.com'), /repo target/);
+});
+
+test('resolveTarget defaults to personal for a connected user with no target', () => {
+  const getToken = () => ({ token: 'u', login: 'alice' });
+  const t = createGitHub({ run: fakeRun(), ...cfg, getToken }).resolveTarget('alice@x.com');
+  assert.equal(t.kind, 'personal');
+  assert.equal(t.login, 'alice');
+});
+
+test('addRemoteAndPush preserves the org owner from the url (not the user login)', async () => {
+  const run = fakeRun();
+  const getToken = () => ({ token: 'ghp_user', login: 'alice', target: { kind: 'org', org: 'globex' } });
+  const gh = createGitHub({ run, ...cfg, getToken });
+  await gh.addRemoteAndPush('/r', 'https://github.com/globex/tool', 'alice@x.com');
+  const remote = run.calls.find((c) => c.args[0] === 'remote');
+  assert.match(remote.args[3], /x-access-token:ghp_user@github\.com\/globex\/tool/);
+});

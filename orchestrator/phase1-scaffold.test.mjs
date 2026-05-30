@@ -9,7 +9,7 @@ import { phase1Scaffold } from './phase1-scaffold.mjs';
 const CARD_ID = '550e8400-e29b-41d4-a716-446655440000';
 const sampleSpec = fs.readFileSync(path.join(import.meta.dirname, '..', 'fixtures', 'sample-spec.md'), 'utf8');
 
-function fakeGh({ diff = '' } = {}) {
+function fakeGh({ diff = '', target } = {}) {
   const calls = [];
   const rec = (name) => (...a) => { calls.push([name, ...a]); };
   return {
@@ -18,6 +18,14 @@ function fakeGh({ diff = '' } = {}) {
     commitAll: rec('commitAll'),
     addRemoteAndPush: rec('addRemoteAndPush'),
     push: rec('push'),
+    checkoutBranch: rec('checkoutBranch'),
+    pushBranch: rec('pushBranch'),
+    resolveTarget: () => target,
+    async cloneExisting(repoDir) {
+      calls.push(['cloneExisting', repoDir]);
+      fs.mkdirSync(repoDir, { recursive: true }); // simulate a checkout dir appearing
+      return `https://github.com/${target?.owner}/${target?.repo}`;
+    },
     async createRepo(slug) { calls.push(['createRepo', slug]); return `https://github.com/acme/${slug}`; },
     async createPr(cwd, o) { calls.push(['createPr', cwd, o]); return 'https://github.com/acme/x/pull/1'; },
     async stagedDiff() { return diff; },
@@ -112,6 +120,21 @@ test('a detected secret blocks the push and fails the card (§12.5)', async () =
   const m = await box.getMetadata(fileId);
   assert.equal(m.status, 'failed');
   assert.equal(gh.calls.find((c) => c[0] === 'push'), undefined);
+});
+
+test('a repo target clones + branches the existing repo instead of creating one, still opens a PR', async () => {
+  const { box, fileId, meta, workRoot } = await setup();
+  const gh = fakeGh({ target: { kind: 'repo', owner: 'globex', repo: 'flaky' } });
+  await phase1Scaffold(fileId, meta, { box, ...deps({ workRoot, gh }) });
+
+  const names = gh.calls.map((c) => c[0]);
+  assert.ok(names.includes('cloneExisting'), 'should clone the existing repo');
+  assert.equal(names.includes('createRepo'), false, 'must not create a new repo');
+  const branch = gh.calls.find((c) => c[0] === 'checkoutBranch');
+  assert.match(branch[2], /^devtool\//);
+  assert.ok(names.includes('pushBranch'));
+  assert.ok(names.includes('createPr'));
+  assert.match((await box.getMetadata(fileId)).repo_url, /github\.com\/globex\/flaky/);
 });
 
 test('a non-zero Claude exit fails the card, no PR (§9.3)', async () => {

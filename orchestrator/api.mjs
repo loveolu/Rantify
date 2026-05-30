@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { createJobRegistry } from './mine-jobs.mjs';
+import { parseTarget, serializeTarget } from './auth/targets.mjs';
 
 const JSON_HEADER = { 'Content-Type': 'application/json' };
 
@@ -97,10 +98,31 @@ export function createApi({ box, tokenStore, mine, jobs = createJobRegistry() })
       const raw = await fs.readFile(tokenStore.filePath, 'utf8').catch(() => '{}');
       const data = JSON.parse(raw);
       for (const [email, entry] of Object.entries(data)) {
-        connections.push({ email, login: entry.login, connected: true });
+        connections.push({
+          email,
+          login: entry.login,
+          connected: true,
+          target: serializeTarget(entry.target),
+        });
       }
     }
     json(res, 200, { connections });
+  }
+
+  // Change the build target (personal / org / existing repo) without re-authorizing.
+  async function setTarget(req, res) {
+    if (!tokenStore) { json(res, 503, { error: 'auth is not configured on this server' }); return; }
+    const body = await readJson(req);
+    const email = String(body.email ?? '').trim();
+    if (!email) { json(res, 400, { error: 'missing email' }); return; }
+    let target;
+    try { target = parseTarget(body.target); }
+    catch (err) { json(res, 400, { error: err.message }); return; }
+    if (!tokenStore.setTarget(email, target)) {
+      json(res, 404, { error: `no connected GitHub account for ${email}` });
+      return;
+    }
+    json(res, 200, { email, target: serializeTarget(target) });
   }
 
   return async function handleApi(req, res) {
@@ -126,6 +148,7 @@ export function createApi({ box, tokenStore, mine, jobs = createJobRegistry() })
           if (parts.length === 2 && method === 'GET') return listMine(req, res);
         }
         if (parts[1] === 'auth' && parts[2] === 'status' && method === 'GET') return await authStatus(req, res);
+        if (parts[1] === 'auth' && parts[2] === 'target' && method === 'POST') return await setTarget(req, res);
       }
       json(res, 404, { error: 'not found' });
     } catch (err) {
