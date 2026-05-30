@@ -26,8 +26,8 @@ let cached;
  * @param {Record<string,string|undefined>} [env]
  * @param {(creds:{clientId:string,clientSecret:string,enterpriseId:string})=>any} [makeClient]
  */
-export function getBoxClient(env = process.env, makeClient = defaultMakeClient) {
-  if (!cached) cached = makeClient(requireBoxEnv(env));
+export async function getBoxClient(env = process.env, makeClient = defaultMakeClient) {
+  if (!cached) cached = await makeClient(requireBoxEnv(env));
   return cached;
 }
 

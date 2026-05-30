@@ -6,7 +6,8 @@
 import { getBoxClient } from '../lib/auth.mjs';
 import { templateFields } from './template-fields.mjs';
 
-export async function createTemplate(client = getBoxClient()) {
+export async function createTemplate(client) {
+  if (!client) client = await getBoxClient();
   try {
     await client.metadataTemplates.createMetadataTemplate({
       scope: 'enterprise',
