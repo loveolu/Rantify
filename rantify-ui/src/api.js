@@ -2,7 +2,8 @@ const BASE = import.meta.env.VITE_API_URL || 'http://localhost:8080';
 const inflight = new Map();
 
 function key(path, opts) {
-  return `${opts.method || 'GET'}:${path}`;
+  const body = opts.body || '';
+  return `${opts.method || 'GET'}:${path}:${body}`;
 }
 
 export async function api(path, opts = {}) {
@@ -22,4 +23,12 @@ export async function api(path, opts = {}) {
 
   inflight.set(k, promise);
   try { return await promise; } finally { inflight.delete(k); }
+}
+
+/** Move a card to a new status. Calls PUT /api/cards/:fileId with { status }. */
+export async function moveCard(fileId, status) {
+  return api(`/api/cards/${fileId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  });
 }

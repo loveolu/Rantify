@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../api';
+import { api, moveCard } from '../api';
 import KanbanColumn from '../components/KanbanColumn';
 import { STATUSES } from '../lib/status';
 import { IconArrow } from '../components/icons';
@@ -10,26 +10,53 @@ export default function Dashboard() {
   const [jobs, setJobs] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [moveError, setMoveError] = useState(null);
+  const movingRef = useRef(false);
+
+  useEffect(() => {
+    if (!moveError) return;
+    const t = setTimeout(() => setMoveError(null), 5000);
+    return () => clearTimeout(t);
+  }, [moveError]);
 
   const load = useCallback(() => {
     Promise.all([
       api('/api/cards'),
-      api('/api/mine').then((d) => d.jobs || []).catch(() => []), // mining is optional
+      api('/api/mine').then((d) => d.jobs || []).catch(() => []),
     ])
-      .then(([cardData, jobData]) => { setCards(cardData); setJobs(jobData); setError(null); setLoading(false); })
+      .then(([cardData, jobData]) => {
+        if (!movingRef.current) {
+          setCards(cardData);
+          setError(null);
+        }
+        setJobs(jobData);
+        setLoading(false);
+      })
       .catch((err) => { setError(err.message); setLoading(false); });
   }, []);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 8000); // live polling; faster so mining progress shows up promptly
+    const t = setInterval(load, 8000);
     return () => clearInterval(t);
   }, [load]);
 
-  // In-flight (and just-failed) mining jobs become non-clickable placeholders in the Mining column.
   const miningCards = jobs
     .filter((j) => j.status === 'mining' || j.status === 'error')
     .map((j) => ({ jobId: j.jobId, mining: true, query: j.query, subreddit: j.subreddit, creator_email: j.creatorEmail, error: j.status === 'error' ? j.error : null }));
+
+  const handleMove = useCallback((fileId, newStatus, oldStatus) => {
+    movingRef.current = true;
+    setCards((prev) => prev.map((c) => c.fileId === fileId ? { ...c, status: newStatus } : c));
+    setMoveError(null);
+
+    moveCard(fileId, newStatus)
+      .catch((err) => {
+        setCards((prev) => prev.map((c) => c.fileId === fileId ? { ...c, status: oldStatus } : c));
+        setMoveError(`Failed to move card: ${err.message}`);
+      })
+      .finally(() => { movingRef.current = false; });
+  }, []);
 
   const grouped = Object.fromEntries(STATUSES.map((s) => [s, []]));
   for (const c of cards) (grouped[c.status] || (grouped[c.status] = [])).push(c);
@@ -58,10 +85,13 @@ export default function Dashboard() {
 
       {loading && <div className="loading"><span className="pulse" /> Loading cards…</div>}
       {error && <div className="error">Failed to load: {error}</div>}
+      {moveError && <div className="error" role="alert">{moveError}</div>}
 
       {!loading && !error && (
         <div className="kanban">
-          {STATUSES.map((s) => <KanbanColumn key={s} status={s} cards={grouped[s] || []} />)}
+          {STATUSES.map((s) => (
+            <KanbanColumn key={s} status={s} cards={grouped[s] || []} onMove={handleMove} />
+          ))}
         </div>
       )}
     </div>
