@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Card from './Card';
-import { STATUS_LABEL, STATUS_COLOR, isForwardMove } from '../lib/status';
+import { STATUS_COLOR, isForwardMove } from '../lib/status';
 
 const STATUS_LABELS = {
   mining: 'Mining',
