@@ -2,9 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { templateFields } from './template-fields.mjs';
 
-test('defines all 8 SPEC §5.3 fields with correct keys', () => {
+test('defines all SPEC §5.3 fields with correct keys', () => {
   const keys = templateFields().map((f) => f.key);
-  assert.deepEqual(keys.sort(), ['box_task_id', 'builder_session_id', 'card_id', 'pain_score', 'pr_url', 'repo_url', 'status', 'theme'].sort());
+  assert.deepEqual(keys.sort(), ['box_task_id', 'builder_session_id', 'card_id', 'creator_email', 'pain_score', 'pr_url', 'repo_url', 'status', 'theme'].sort());
 });
 
 test('status is an enum with the six lifecycle states', () => {

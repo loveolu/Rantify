@@ -6,7 +6,8 @@
  */
 
 const BUILDER_FIELDS = ['builder_session_id', 'repo_url', 'pr_url', 'box_task_id'];
-const ALL_FIELDS = ['status', 'theme', 'pain_score', 'card_id', ...BUILDER_FIELDS];
+const USER_FIELDS = ['creator_email'];
+const ALL_FIELDS = ['status', 'theme', 'pain_score', 'card_id', ...BUILDER_FIELDS, ...USER_FIELDS];
 
 /** Contract CardMetadata → Box instance values (drop nulls/undefined). */
 export function toInstanceValues(meta) {
@@ -26,6 +27,7 @@ export function toContractMetadata(values) {
     card_id: values.card_id,
   };
   for (const k of BUILDER_FIELDS) out[k] = values[k] ?? null;
+  for (const k of USER_FIELDS) out[k] = values[k] ?? null;
   return out;
 }
 

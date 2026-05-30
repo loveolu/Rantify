@@ -16,5 +16,6 @@ export function templateFields() {
     str('repo_url'),
     str('pr_url'),
     str('box_task_id'),
+    str('creator_email'),
   ];
 }

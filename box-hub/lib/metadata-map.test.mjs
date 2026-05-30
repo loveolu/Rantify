@@ -5,6 +5,7 @@ import { toInstanceValues, toContractMetadata, toPatchOps } from './metadata-map
 const full = {
   status: 'inbox', theme: 'testing-ci', pain_score: 0.82, card_id: 'c1',
   builder_session_id: null, repo_url: null, pr_url: null, box_task_id: null,
+  creator_email: null,
 };
 
 test('toInstanceValues omits null fields (Box cannot store null)', () => {
@@ -20,10 +21,11 @@ test('toContractMetadata fills absent builder fields as null', () => {
   assert.equal(m.repo_url, null);
   assert.equal(m.pr_url, null);
   assert.equal(m.box_task_id, null);
+  assert.equal(m.creator_email, null);
 });
 
 test('round-trips a fully-populated instance', () => {
-  const populated = { status: 'building', theme: 'testing-ci', pain_score: 0.5, card_id: 'c1', builder_session_id: 'c1-phase1', repo_url: 'r', pr_url: 'p', box_task_id: 't' };
+  const populated = { status: 'building', theme: 'testing-ci', pain_score: 0.5, card_id: 'c1', builder_session_id: 'c1-phase1', repo_url: 'r', pr_url: 'p', box_task_id: 't', creator_email: 'user@x.com' };
   assert.deepEqual(toContractMetadata(toInstanceValues(populated)), populated);
 });
 

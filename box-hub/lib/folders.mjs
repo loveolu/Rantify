@@ -42,3 +42,17 @@ export async function ensureCardFolder(client, cardId, status, tree) {
 export async function moveFolder(client, folderId, newParentId) {
   await client.folders.updateFolderById(folderId, { parent: { id: newParentId } });
 }
+
+/** Add an editor collaborator to a folder if not already present (idempotent). */
+export async function ensureCollaborator(client, folderId, email) {
+  const collabs = await client.listCollaborations.getFolderCollaborations(folderId);
+  const existing = (collabs.entries ?? []).find(
+    (c) => c.accessibleBy?.type === 'user' && c.accessibleBy?.login === email,
+  );
+  if (existing) return existing;
+  return client.userCollaborations.createCollaboration({
+    item: { type: 'folder', id: folderId },
+    accessibleBy: { type: 'user', login: email },
+    role: 'editor',
+  });
+}
