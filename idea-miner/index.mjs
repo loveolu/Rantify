@@ -15,7 +15,7 @@ import { upload } from './uploader.mjs';
 import { FileSystemBoxClient } from '../contracts/box-client-mock.mjs';
 
 const REPO_ROOT = path.join(import.meta.dirname, '..');
-const REQUIRED_ENV = ['APIFY_TOKEN', 'ANTHROPIC_API_KEY'];
+const REQUIRED_ENV = ['APIFY_TOKEN', 'AWS_REGION'];
 
 /** Throw (naming every missing variable) before any network call. Never logs values. */
 export function assertEnv(env = process.env) {

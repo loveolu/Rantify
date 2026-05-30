@@ -48,13 +48,13 @@ test('a successful run resolves (Req 6.5)', async () => {
 });
 
 test('assertEnv throws naming a missing APIFY_TOKEN (Req 6.8)', () => {
-  assert.throws(() => assertEnv({ ANTHROPIC_API_KEY: 'k' }), /APIFY_TOKEN/);
+  assert.throws(() => assertEnv({ AWS_REGION: 'us-east-1' }), /APIFY_TOKEN/);
 });
-test('assertEnv throws naming a missing ANTHROPIC_API_KEY (Req 6.8)', () => {
-  assert.throws(() => assertEnv({ APIFY_TOKEN: 't' }), /ANTHROPIC_API_KEY/);
+test('assertEnv throws naming a missing AWS_REGION (Req 6.8)', () => {
+  assert.throws(() => assertEnv({ APIFY_TOKEN: 't' }), /AWS_REGION/);
 });
 test('assertEnv passes when both present', () => {
-  assert.doesNotThrow(() => assertEnv({ APIFY_TOKEN: 't', ANTHROPIC_API_KEY: 'k' }));
+  assert.doesNotThrow(() => assertEnv({ APIFY_TOKEN: 't', AWS_REGION: 'us-east-1' }));
 });
 
 test('loadConfigs throws with the filename when a config is missing (Req 1.1)', () => {
@@ -71,4 +71,5 @@ test('loadConfigs reads the real repo configs', () => {
   const { config: c, themes: t } = loadConfigs();
   assert.equal(c.theme, 'testing-ci');
   assert.ok(t.some((x) => x.id === 'testing-ci'));
+  assert.ok(c.bedrock_model_id);
 });

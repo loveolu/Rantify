@@ -1,5 +1,8 @@
 # Implementation Plan: Idea Miner
 
+**Status: complete** (2026-05-30). All modules, tests (Properties 1–14), and
+`verify-pipeline.mjs` smoke test pass. See `idea-miner/README.md` for run instructions.
+
 ## Overview
 
 Build the five-stage Reddit-to-Box pipeline as six independently-testable modules,
@@ -11,7 +14,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
 
 ## Tasks
 
-- [-] 0. Project setup — `idea-miner/package.json` and dev dependencies
+- [x] 0. Project setup — `idea-miner/package.json` and dev dependencies
   - Create `idea-miner/package.json` with `"type": "module"`, `"engines": { "node": ">=20.11" }`, and scripts:
     - `"test": "node --test idea-miner/__tests__/**/*.test.mjs"`
     - `"test:run": "node --test --test-reporter=spec idea-miner/__tests__/**/*.test.mjs"`
@@ -21,8 +24,8 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
   - Verify `node --version` is ≥ 20.11 in a startup check comment in `index.mjs`
   - _Requirements: 6.6_
 
-- [ ] 1. Implement `idea-miner/scorer.mjs` — Post scoring and filtering
-  - [~] 1.1 Create `idea-miner/scorer.mjs` with all exports and helpers
+- [x] 1. Implement `idea-miner/scorer.mjs` — Post scoring and filtering
+  - [x] 1.1 Create `idea-miner/scorer.mjs` with all exports and helpers
     - Add JSDoc `@typedef` for `Post` and `ScoredPost` (copy exact shapes from design §Data Models)
     - Implement internal helper `isValidTimestamp(created_utc)` — returns `false` if missing or non-numeric
     - Implement internal helper `computeBaseScore(upvotes)` — `Math.log1p(Math.max(0, upvotes))`
@@ -38,7 +41,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
       - Return surviving `ScoredPost[]`
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
-  - [ ]* 1.2 Write property-based and unit tests for `scorer.mjs`
+  - [x]* 1.2 Write property-based and unit tests for `scorer.mjs`
     - Create `idea-miner/__tests__/scorer.test.mjs`
     - Use `node:test` + `fast-check`; import `score` from `../scorer.mjs`
     - **Property 4: Scoring formula is deterministic**
@@ -63,8 +66,8 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Unit test: post with `final_score` exactly `1.0` survives; post with `0.999` is dropped (Req 2.3)
     - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.6, 2.7_
 
-- [ ] 2. Implement `idea-miner/cluster.mjs` — Keyword clustering
-  - [~] 2.1 Create `idea-miner/cluster.mjs` with all exports and helpers
+- [x] 2. Implement `idea-miner/cluster.mjs` — Keyword clustering
+  - [x] 2.1 Create `idea-miner/cluster.mjs` with all exports and helpers
     - Add JSDoc `@typedef` for `Cluster`
     - Compile cluster patterns once at module load:
       ```js
@@ -84,7 +87,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
       - Return surviving `Cluster[]`
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9_
 
-  - [ ]* 2.2 Write property-based and unit tests for `cluster.mjs`
+  - [x]* 2.2 Write property-based and unit tests for `cluster.mjs`
     - Create `idea-miner/__tests__/cluster.test.mjs`
     - Use `node:test` + `fast-check`; import `cluster` from `../cluster.mjs`
     - **Property 8: Cluster membership follows regex patterns**
@@ -104,11 +107,11 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Unit test: post matching neither pattern is silently excluded (Req 3.8)
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.7, 3.8_
 
-- [~] 3. Checkpoint — scorer and cluster tests pass
+- [x] 3. Checkpoint — scorer and cluster tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 4. Implement `idea-miner/scraper.mjs` — Apify Reddit scraper
-  - [~] 4.1 Create `idea-miner/scraper.mjs` with all exports and helpers
+- [x] 4. Implement `idea-miner/scraper.mjs` — Apify Reddit scraper
+  - [x] 4.1 Create `idea-miner/scraper.mjs` with all exports and helpers
     - Add JSDoc `@typedef` for `Post`
     - Implement internal helper `buildApifyPayload(config)` — constructs actor input JSON with `subreddits`, `searchPhrases` (from `config.keywords`), `maxItems`, and `"type": "posts"`
     - Implement internal helper `dedup(posts)` — removes duplicate `id` values, preserving first occurrence
@@ -123,7 +126,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - **Requires env var: `APIFY_TOKEN`**
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8_
 
-  - [ ]* 4.2 Write unit tests for `scraper.mjs` (mock `fetch`)
+  - [x]* 4.2 Write unit tests for `scraper.mjs` (mock `fetch`)
     - Create `idea-miner/__tests__/scraper.test.mjs`
     - Use `node:test`; mock `fetch` using `node:test` mock or a manual stub
     - **Property 1: Post field extraction is complete**
@@ -144,8 +147,8 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Unit test: zero results from Apify causes throw with log message (Req 1.8)
     - _Requirements: 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8_
 
-- [ ] 5. Implement `idea-miner/generator.mjs` — LLM Build Card generation
-  - [~] 5.1 Create `idea-miner/generator.mjs` with all exports and helpers
+- [x] 5. Implement `idea-miner/generator.mjs` — LLM Build Card generation
+  - [x] 5.1 Create `idea-miner/generator.mjs` with all exports and helpers
     - Add JSDoc `@typedef` for `ValidationResult`
     - Implement internal helper `buildSystemPrompt()` — returns the fixed system prompt string instructing the model to return ONLY file content with no preamble, no code fences, no commentary
     - Implement internal helper `buildUserPrompt(cluster, config, schemaTemplate, errorMsg?)` — constructs the user turn including theme, cluster name, unique authors, subreddits, post count, paraphrased complaints (PII stripped), schema template from `fixtures/sample-spec.md`, and optional validation error message on retry
@@ -168,7 +171,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - **Requires env var: `ANTHROPIC_API_KEY`**
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10_
 
-  - [ ]* 5.2 Write property-based and unit tests for `generator.mjs`
+  - [x]* 5.2 Write property-based and unit tests for `generator.mjs`
     - Create `idea-miner/__tests__/generator.test.mjs`
     - Use `node:test` + `fast-check`; mock `callClaude` (do not make real API calls)
     - **Property 11: Schema validator correctly identifies valid and invalid cards**
@@ -187,11 +190,11 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Unit test: transport error on attempt 1 → retry; transport error on attempt 2 → Failed_Card (Req 4.10)
     - _Requirements: 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10_
 
-- [~] 6. Checkpoint — generator tests pass
+- [x] 6. Checkpoint — generator tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 7. Implement `idea-miner/uploader.mjs` — Box upload with de-dup and backoff
-  - [~] 7.1 Create `idea-miner/uploader.mjs` with all exports and helpers
+- [x] 7. Implement `idea-miner/uploader.mjs` — Box upload with de-dup and backoff
+  - [x] 7.1 Create `idea-miner/uploader.mjs` with all exports and helpers
     - Add JSDoc `@typedef` for `CardMetadata` (local copy matching contract shape)
     - Implement internal helper `extractFrontMatter(specMarkdown)` — parses YAML front-matter between `---` delimiters; returns `{ id, theme, signal_strength: { score } }`
     - Implement internal helper `buildMetadata(frontMatter)` — constructs `CardMetadata` with:
@@ -212,7 +215,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
       - Only call `findDuplicate` and `uploadCard` on `boxClient` — no other methods
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8_
 
-  - [ ]* 7.2 Write property-based and unit tests for `uploader.mjs`
+  - [x]* 7.2 Write property-based and unit tests for `uploader.mjs`
     - Create `idea-miner/__tests__/uploader.test.mjs`
     - Use `node:test` + `fast-check`; use `FileSystemBoxClient` mock from `contracts/box-client-mock.mjs` or a manual stub
     - **Property 13: Upload metadata is correctly derived from the Build Card**
@@ -230,11 +233,11 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Unit test: no BoxClient methods other than `findDuplicate`/`uploadCard` are called (Req 5.8)
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8_
 
-- [~] 8. Checkpoint — uploader tests pass
+- [x] 8. Checkpoint — uploader tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 9. Implement `idea-miner/index.mjs` — Pipeline entry point
-  - [~] 9.1 Create `idea-miner/index.mjs` wiring all five modules
+- [x] 9. Implement `idea-miner/index.mjs` — Pipeline entry point
+  - [x] 9.1 Create `idea-miner/index.mjs` wiring all five modules
     - Import `scrape` from `./scraper.mjs`
     - Import `score` from `./scorer.mjs`
     - Import `cluster` from `./cluster.mjs`
@@ -258,7 +261,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Use ESM `import`/`export` throughout; compatible with Node.js 20.11+
     - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9_
 
-  - [ ]* 9.2 Write integration tests for `index.mjs`
+  - [x]* 9.2 Write integration tests for `index.mjs`
     - Create `idea-miner/__tests__/index.integration.test.mjs`
     - Use `node:test`; mock all external calls (Apify, Anthropic) and use `FileSystemBoxClient` with a temp directory
     - Unit test: `node idea-miner/index.mjs` runs all five stages in sequence (Req 6.1)
@@ -271,8 +274,8 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Unit test: malformed JSON config throws with filename in message (Req 1.1)
     - _Requirements: 6.1, 6.4, 6.5, 6.8, 6.9, 1.1_
 
-- [ ] 10. End-to-end smoke test against the mock
-  - [~] 10.1 Run `node idea-miner/index.mjs` end-to-end with mock data
+- [x] 10. End-to-end smoke test against the mock
+  - [x] 10.1 Run `node idea-miner/verify-pipeline.mjs` end-to-end with stubbed externals
     - Set `APIFY_TOKEN=test-token` and `ANTHROPIC_API_KEY=test-key` in the environment
     - Stub the Apify HTTP call to return a fixture array of posts (at least 10 posts matching `flaky-tests` or `slow-ci` patterns, from ≥ 5 distinct authors and ≥ 2 subreddits)
     - Stub the Anthropic HTTP call to return a valid spec.md string matching `fixtures/sample-spec.md` shape
@@ -281,7 +284,7 @@ use ESM syntax (`import`/`export`) and target Node.js 20.11+.
     - Verify process exits with code `0`
     - _Requirements: 6.1, 6.2, 6.3, 6.5, 6.7_
 
-- [~] 11. Final checkpoint — all tests pass
+- [x] 11. Final checkpoint — all tests pass
   - Run `node --test idea-miner/__tests__/**/*.test.mjs` and confirm all tests pass.
   - Ensure all tests pass, ask the user if questions arise.
 

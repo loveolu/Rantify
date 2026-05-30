@@ -17,5 +17,6 @@
   "window_days": 60,
   "min_unique_authors": 5,
   "min_subreddit_count": 2,
-  "max_posts_per_run": 50
+  "max_posts_per_run": 50,
+  "bedrock_model_id": "anthropic.claude-3-5-haiku-20241022-v1:0"
 }

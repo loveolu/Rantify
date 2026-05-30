@@ -39,7 +39,7 @@ two. New need → add a method, never mutate an existing one.
 | **Owns** | `idea-miner/` (new folder), `config/idea-miner.json`, `config/themes.json` |
 | **Consumes** | `contracts/box-client.mjs` — only `findDuplicate()` and `uploadCard()` |
 | **Produces** | a valid `spec.md` + metadata in Box `Inbox/`, `status=inbox` |
-| **External deps** | Apify (`APIFY_TOKEN`), Anthropic API (`ANTHROPIC_API_KEY`) |
+| **External deps** | Apify (`APIFY_TOKEN`), Amazon Bedrock (`AWS_REGION` + AWS credentials) |
 
 **Build against:** the mock. Your `uploadCard()` calls land in `.box-mock/`. Validate
 your generated card matches `fixtures/sample-spec.md`'s shape (it's the §5.2 schema).

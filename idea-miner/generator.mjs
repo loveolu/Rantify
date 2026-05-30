@@ -1,18 +1,18 @@
 /**
  * generator.mjs — LLM Build Card generation + schema validation (SPEC.md §6.5; Req 4).
  *
- * generate() calls Claude (Anthropic API), validates the result against the §5.2 schema,
+ * generate() calls Claude on Amazon Bedrock, validates the result against the §5.2 schema,
  * retries once with the error appended, and on a second failure emits a Failed_Card
- * (status="failed") carrying the raw output. It never sets a builder.* field. The Claude
+ * (status="failed") carrying the raw output. It never sets a builder.* field. The Bedrock
  * call is injectable so the suite never hits the network.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 
-const MODEL = 'claude-haiku-4-5-20251001'; // current Haiku (improvement over the design's 3.5 id)
-const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
+export const DEFAULT_BEDROCK_MODEL_ID = 'anthropic.claude-3-5-haiku-20241022-v1:0';
 const SCHEMA_PATH = path.join(import.meta.dirname, '..', 'fixtures', 'sample-spec.md');
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
@@ -46,25 +46,38 @@ export function buildUserPrompt(cluster, config, schemaTemplate, errorMsg) {
   ].join('\n');
 }
 
-async function callClaude(systemPrompt, userPrompt, fetchImpl = globalThis.fetch) {
-  const res = await fetchImpl(ANTHROPIC_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      max_tokens: 4096,
-      // cache the large schema-bearing system prompt across clusters in a run
-      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content: userPrompt }],
-    }),
+/** @param {object} config @param {NodeJS.ProcessEnv} [env] */
+export function resolveModelId(config, env = process.env) {
+  return env.BEDROCK_MODEL_ID || config.bedrock_model_id || DEFAULT_BEDROCK_MODEL_ID;
+}
+
+export function buildBedrockBody(systemPrompt, userPrompt) {
+  return {
+    anthropic_version: 'bedrock-2023-05-31',
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  };
+}
+
+/**
+ * @param {string} systemPrompt
+ * @param {string} userPrompt
+ * @param {{config?:object, region?:string, modelId?:string, send?:Function}} [deps]
+ */
+export async function callBedrock(systemPrompt, userPrompt, { config = {}, region = process.env.AWS_REGION, modelId, send } = {}) {
+  const body = buildBedrockBody(systemPrompt, userPrompt);
+  const command = new InvokeModelCommand({
+    modelId: modelId ?? resolveModelId(config),
+    contentType: 'application/json',
+    accept: 'application/json',
+    body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Anthropic returned HTTP ${res.status}`);
-  const data = await res.json();
-  return data.content?.[0]?.text ?? '';
+
+  const dispatch = send ?? ((cmd) => new BedrockRuntimeClient({ region }).send(cmd));
+  const res = await dispatch(command);
+  const parsed = JSON.parse(new TextDecoder().decode(res.body));
+  return parsed.content?.[0]?.text ?? '';
 }
 
 // ---- validation ----
@@ -136,17 +149,20 @@ export function injectFailedStatus(rawText, errorMsg) {
 
 /**
  * @param {object} cluster @param {object} config @param {{id:string}[]} themes
- * @param {{callClaudeImpl?:Function}} [deps]
+ * @param {{invokeModelImpl?:Function}} [deps]
  * @returns {Promise<string>} spec.md content (a valid card, or a Failed_Card)
  */
-export async function generate(cluster, config, themes, { callClaudeImpl = callClaude } = {}) {
-  if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY is required to generate cards (SPEC §13) — aborting, no API call made');
+export async function generate(cluster, config, themes, { invokeModelImpl } = {}) {
+  if (!process.env.AWS_REGION) {
+    throw new Error('AWS_REGION is required to generate cards via Amazon Bedrock (SPEC §13) — aborting, no API call made');
+  }
   const schemaTemplate = fs.readFileSync(SCHEMA_PATH, 'utf8');
   const system = buildSystemPrompt();
+  const callModel = invokeModelImpl ?? ((sys, user) => callBedrock(sys, user, { config }));
 
   const attempt = async (errorMsg) => {
     try {
-      const text = await callClaudeImpl(system, buildUserPrompt(cluster, config, schemaTemplate, errorMsg));
+      const text = await callModel(system, buildUserPrompt(cluster, config, schemaTemplate, errorMsg));
       const res = validateCard(text, themes);
       return { text, valid: res.valid, errors: res.errors };
     } catch (err) {
