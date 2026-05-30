@@ -1,7 +1,24 @@
 import { useNavigate } from 'react-router-dom';
 
-export default function Card({ fileId, theme, pain_score, creator_email, status, repo_url, pr_url }) {
+export default function Card({ fileId, mining, query, subreddit, error, theme, pain_score, creator_email, status, repo_url, pr_url }) {
   const navigate = useNavigate();
+
+  // Feedback-mining placeholder: a job in flight (or just-failed). Not yet a real Box card.
+  if (mining) {
+    return (
+      <div className={`card card-mining${error ? ' card-mining-error' : ''}`}>
+        <div className="card-theme">{query}</div>
+        <div className="card-meta">
+          {subreddit ? <span className="card-email">r/{subreddit}</span> : <span className="card-email">all of Reddit</span>}
+          {creator_email && <span className="card-email">{creator_email}</span>}
+        </div>
+        {error
+          ? <span className="card-status status-failed">mining failed</span>
+          : <span className="card-status status-mining"><span className="pulse" /> mining…</span>}
+        {error && <div className="card-error">{error}</div>}
+      </div>
+    );
+  }
 
   return (
     <div className="card" onClick={() => navigate(`/card/${fileId}`)}>

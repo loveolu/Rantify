@@ -52,19 +52,23 @@ function writeFailedCard(failedDir, cardId, specMarkdown) {
 /**
  * @param {string} specMarkdown
  * @param {{findDuplicate:Function, uploadCard:Function}} boxClient
- * @param {{sleep?:Function, failedDir?:string}} [deps]
+ * @param {{sleep?:Function, failedDir?:string, dedupe?:boolean, extraMetadata?:object}} [deps]
  * @returns {Promise<{fileId:string,cardId:string}|'duplicate'|'failed'>}
  */
-export async function upload(specMarkdown, boxClient, { sleep = defaultSleep, failedDir = 'failed-cards' } = {}) {
+export async function upload(specMarkdown, boxClient, { sleep = defaultSleep, failedDir = 'failed-cards', dedupe = true, extraMetadata = {} } = {}) {
   const fm = extractFrontMatter(specMarkdown);
 
-  const dupes = await boxClient.findDuplicate({ theme: fm.theme, withinDays: 7 });
-  if (Array.isArray(dupes) && dupes.length > 0) {
-    console.log(`[idea-miner] duplicate suppressed (theme=${fm.theme}): ${dupes.map((d) => d.cardId).join(', ')}`);
-    return 'duplicate';
+  // Theme-based de-dup suits the fixed-theme dev-pain flow; subject mining bypasses it
+  // (distinct subjects share the product-feedback theme, so a theme match is not a duplicate).
+  if (dedupe) {
+    const dupes = await boxClient.findDuplicate({ theme: fm.theme, withinDays: 7 });
+    if (Array.isArray(dupes) && dupes.length > 0) {
+      console.log(`[idea-miner] duplicate suppressed (theme=${fm.theme}): ${dupes.map((d) => d.cardId).join(', ')}`);
+      return 'duplicate';
+    }
   }
 
-  const metadata = buildMetadata(fm);
+  const metadata = { ...buildMetadata(fm), ...extraMetadata };
   try {
     const ref = await withExponentialBackoff(
       () => boxClient.uploadCard({ cardId: fm.id, specMarkdown, metadata }), 3, 1000, sleep,

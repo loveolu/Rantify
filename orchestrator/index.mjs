@@ -25,6 +25,8 @@ import { safeError } from './phase-common.mjs';
 import { createTokenStore } from './auth/token-store.mjs';
 import { createGitHubOAuth } from './auth/github-oauth.mjs';
 import { createApi } from './api.mjs';
+import { loadConfigs as loadMinerConfigs } from '../idea-miner/index.mjs';
+import { mineFromQuery } from '../idea-miner/mine.mjs';
 
 const REPO_ROOT = path.join(import.meta.dirname, '..');
 const DEFAULT_PROMPTS = path.join(REPO_ROOT, 'specs', 'devtool-loop', 'prompts');
@@ -48,6 +50,8 @@ export function createOrchestrator({ box, config, run = realRun, workRoot, promp
 }
 
 async function main() {
+  // Auto-load repo-root .env so `node orchestrator/index.mjs` works without a shell wrapper (cross-platform).
+  try { process.loadEnvFile(path.join(REPO_ROOT, '.env')); } catch { /* no .env file — rely on the ambient environment */ }
   const config = loadConfig(process.env);
   const run = config.stubExternals ? makeStubRun() : realRun;
   const workRoot = process.env.ORCH_WORK_ROOT ?? path.join(REPO_ROOT, '.orch-work');
@@ -74,7 +78,18 @@ async function main() {
   const poller = createPoller({ box, onCard });
   poller.start(30_000);
 
-  const api = createApi({ box, tokenStore });
+  // Feedback mining: free-text query -> Bedrock -> Reddit scrape -> Bedrock -> inbox card.
+  let mine;
+  try {
+    const { config: minerConfig, themes } = loadMinerConfigs();
+    mine = ({ query, subreddit, creator_email }) =>
+      mineFromQuery({ query, subreddit, creatorEmail: creator_email }, { boxClient: box, config: minerConfig, themes });
+    console.log(`[orchestrator] feedback mining enabled (apify=${config.apifyToken ? 'set' : 'MISSING'}, bedrock=${config.bedrockRegion ? 'set' : 'MISSING'})`);
+  } catch (err) {
+    console.warn(`[orchestrator] feedback mining disabled: ${safeError(err)}`);
+  }
+
+  const api = createApi({ box, tokenStore, mine });
   const port = Number(process.env.PORT ?? 8080);
   createWebhookServer({ config, onEvent: onCard, githubOAuth, api }).listen(port, () =>
     console.log(`[orchestrator] webhook server on :${port}, poller every 30s, stub=${config.stubExternals}`));

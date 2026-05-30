@@ -7,23 +7,35 @@ import { IconArrow } from '../components/icons';
 
 export default function Dashboard() {
   const [cards, setCards] = useState([]);
+  const [jobs, setJobs] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(() => {
-    api('/api/cards')
-      .then((data) => { setCards(data); setError(null); setLoading(false); })
+    Promise.all([
+      api('/api/cards'),
+      api('/api/mine').then((d) => d.jobs || []).catch(() => []), // mining is optional
+    ])
+      .then(([cardData, jobData]) => { setCards(cardData); setJobs(jobData); setError(null); setLoading(false); })
       .catch((err) => { setError(err.message); setLoading(false); });
   }, []);
 
   useEffect(() => {
     load();
-    const t = setInterval(load, 15000); // live polling, matches the build loop
+    const t = setInterval(load, 8000); // live polling; faster so mining progress shows up promptly
     return () => clearInterval(t);
   }, [load]);
 
+  // In-flight (and just-failed) mining jobs become non-clickable placeholders in the Mining column.
+  const miningCards = jobs
+    .filter((j) => j.status === 'mining' || j.status === 'error')
+    .map((j) => ({ jobId: j.jobId, mining: true, query: j.query, subreddit: j.subreddit, creator_email: j.creatorEmail, error: j.status === 'error' ? j.error : null }));
+
   const grouped = Object.fromEntries(STATUSES.map((s) => [s, []]));
   for (const c of cards) (grouped[c.status] || (grouped[c.status] = [])).push(c);
+  grouped.mining = miningCards;
+
+  const activeCount = cards.length + miningCards.length;
 
   return (
     <div>
@@ -31,7 +43,7 @@ export default function Dashboard() {
         <div>
           <span className="eyebrow">Build loop · live</span>
           <h1 className="display">Pipeline</h1>
-          <p>{cards.length} card{cards.length === 1 ? '' : 's'} moving from request to shipped.</p>
+          <p>{activeCount} card{activeCount === 1 ? '' : 's'} moving from request to shipped.</p>
         </div>
         <Link to="/submit" className="btn btn-accent">Submit a request <IconArrow className="arrow" /></Link>
       </div>

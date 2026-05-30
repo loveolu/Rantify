@@ -30,31 +30,46 @@ export function computeBaseScore(upvotes) {
   return Math.log1p(Math.max(0, upvotes));
 }
 
-export function computeKeywordBoost(body, created_utc) {
+/** Build a case-insensitive matcher for subject terms (e.g. from the user's subject). */
+function subjectMatcher(subjectTerms) {
+  const terms = (subjectTerms ?? []).map((t) => String(t).trim()).filter((t) => t.length >= 3);
+  if (terms.length === 0) return null;
+  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  return new RegExp(escaped.join('|'), 'i');
+}
+
+/**
+ * @param {string} body @param {number} created_utc
+ * @param {{subjectRe?:RegExp|null}} [opts] subject-relevance boost for feedback mining
+ */
+export function computeKeywordBoost(body, created_utc, { subjectRe = null } = {}) {
   const text = body ?? '';
   let boost = 0;
   if (URGENCY.test(text)) boost += 0.20;
   if (STACK.test(text)) boost += 0.10;
   if (isValidTimestamp(created_utc) && (Date.now() - created_utc * 1000) < 30 * DAY_MS) boost += 0.15;
+  if (subjectRe && subjectRe.test(text)) boost += 0.20; // post explicitly mentions the subject
   return boost;
 }
 
 /**
  * @param {Post[]} posts
- * @param {{window_days:number}} config
+ * @param {{window_days:number, min_final_score?:number, subjectTerms?:string[]}} config
  * @returns {ScoredPost[]}
  */
 export function score(posts, config) {
   const windowMs = config.window_days * DAY_MS;
+  const minScore = config.min_final_score ?? 1.0; // feedback mining can lower this (posts are pre-filtered by topic)
+  const subjectRe = subjectMatcher(config.subjectTerms);
   const out = [];
   for (const p of posts) {
     if (!isValidTimestamp(p.created_utc)) continue;
     const ageMs = Date.now() - p.created_utc * 1000;
     if (ageMs > windowMs) continue;
     const base_score = computeBaseScore(p.score);
-    const keyword_boost = computeKeywordBoost(p.body, p.created_utc);
+    const keyword_boost = computeKeywordBoost(p.body, p.created_utc, { subjectRe });
     const final_score = base_score * (1 + keyword_boost);
-    if (final_score < 1.0) continue;
+    if (final_score < minScore) continue;
     out.push({ ...p, base_score, keyword_boost, final_score });
   }
   return out;

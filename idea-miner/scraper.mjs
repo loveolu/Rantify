@@ -15,6 +15,8 @@
  * usable posts — the pipeline aborts rather than writing a partial card.
  */
 
+import { normalizeSubreddit } from './interpreter.mjs';
+
 const ENDPOINT = 'https://api.apify.com/v2/acts/practicaltools~apify-reddit-api/run-sync-get-dataset-items';
 
 /** @typedef {import('./scorer.mjs').Post} Post */
@@ -29,11 +31,15 @@ export function timeFilter(windowDays) {
 }
 
 export function buildApifyPayload(config) {
-  const keywords = config.keywords ?? [];
-  // maxItems is per-query; spread the budget across keywords so total billed ≈ max_posts_per_run.
-  const perQuery = Math.max(1, Math.ceil(config.max_posts_per_run / Math.max(1, keywords.length)));
+  // Dynamic searchPhrases (from the query interpreter) take precedence over static keywords.
+  const phrases = config.searchPhrases ?? config.keywords ?? [];
+  const sub = normalizeSubreddit(config.subreddit);
+  // Scope to a subreddit with Reddit's `subreddit:` operator; results are also post-filtered.
+  const searches = sub ? phrases.map((p) => `${p} subreddit:${sub}`) : phrases;
+  // maxItems is per-query; spread the budget across searches so total billed ≈ max_posts_per_run.
+  const perQuery = Math.max(1, Math.ceil(config.max_posts_per_run / Math.max(1, searches.length)));
   return {
-    searches: keywords,
+    searches,
     searchPosts: true,
     sort: 'relevance',
     time: timeFilter(config.window_days ?? 365),
@@ -115,9 +121,14 @@ export async function scrape(config, { fetchImpl = globalThis.fetch } = {}) {
     throw new Error('Apify returned zero results');
   }
 
-  const posts = cap(dedup(items.filter(isPost).map(mapItem).filter((p) => p.id)), config.max_posts_per_run);
+  let mapped = items.filter(isPost).map(mapItem).filter((p) => p.id);
+  // Guarantee subreddit scoping even if the actor's search operator was loose (precision fix).
+  const sub = normalizeSubreddit(config.subreddit);
+  if (sub) mapped = mapped.filter((p) => String(p.subreddit ?? '').toLowerCase() === sub.toLowerCase());
+
+  const posts = cap(dedup(mapped), config.max_posts_per_run);
   if (posts.length === 0) {
-    console.error('[idea-miner] Apify returned no post items — aborting run');
+    console.error('[idea-miner] Apify returned no usable post items — aborting run');
     throw new Error('Apify returned zero post results');
   }
   return posts;

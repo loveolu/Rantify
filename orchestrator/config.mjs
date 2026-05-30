@@ -48,6 +48,7 @@ export function loadConfig(env = process.env) {
     boxWebhookSecondaryKey: env.BOX_WEBHOOK_SECONDARY_KEY ?? '',
     bedrockRegion: env.BEDROCK_REGION ?? env.AWS_REGION ?? '',
     bedrockModelId: env.BEDROCK_MODEL_ID ?? '',
+    apifyToken: env.APIFY_TOKEN ?? '', // optional: enables /api/mine feedback mining
     githubOAuthClientId: env.GITHUB_OAUTH_CLIENT_ID ?? '',
     githubOAuthClientSecret: env.GITHUB_OAUTH_CLIENT_SECRET ?? '',
     oauthRedirectUri: env.OAUTH_REDIRECT_URI ?? `${env.ORCHESTRATOR_HOST ?? 'http://localhost:8080'}/auth/github/callback`,

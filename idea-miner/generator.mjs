@@ -1,18 +1,23 @@
 /**
- * generator.mjs — LLM Build Card generation + schema validation (SPEC.md §6.5; Req 4).
+ * generator.mjs — LLM implementation-spec generation + schema validation (SPEC.md §6.5; Req 4).
  *
- * generate() calls Claude on Amazon Bedrock, validates the result against the §5.2 schema,
- * retries once with the error appended, and on a second failure emits a Failed_Card
- * (status="failed") carrying the raw output. It never sets a builder.* field. The Bedrock
+ * generate() takes a group of real user-feedback posts about a subject (a company or feature)
+ * and asks Claude on Amazon Bedrock to write an implementation spec.md: the PROBLEM evidenced
+ * by the feedback plus a proposed SOLUTION written as actionable build instructions. It
+ * validates against the §5.2 schema, retries once with the error appended, and on a second
+ * failure emits a Failed_Card (status="failed"). It never sets a builder.* field. The Bedrock
  * call is injectable so the suite never hits the network.
  */
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import yaml from 'js-yaml';
-import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
+import { callBedrock, buildBedrockBody, resolveModelId, assertBedrockEnv, DEFAULT_BEDROCK_MODEL_ID } from './bedrock.mjs';
 
-export const DEFAULT_BEDROCK_MODEL_ID = 'anthropic.claude-3-5-haiku-20241022-v1:0';
+// Re-exported so existing importers (and tests) keep a single entry point.
+export { callBedrock, buildBedrockBody, resolveModelId, DEFAULT_BEDROCK_MODEL_ID };
+
 const SCHEMA_PATH = path.join(import.meta.dirname, '..', 'fixtures', 'sample-spec.md');
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
@@ -23,61 +28,40 @@ const ISO_8601 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 
 export function buildSystemPrompt() {
   return [
-    'You are a technical product manager. Given developer complaints, produce a DevTool',
-    'Build Card in the EXACT YAML+Markdown format provided. You MUST return ONLY the file',
-    'content — no preamble, no code fences, no commentary. The file is a YAML front-matter',
-    'block (delimited by ---) followed by Markdown sections including ## Acceptance Criteria.',
+    'You are a senior product engineer. You are given real user feedback collected from Reddit',
+    'about a specific product, company, or feature. Produce an implementation spec as a Build',
+    'Card in the YAML+Markdown format provided. The card must (1) describe the PROBLEM the',
+    'feedback reveals, grounded in the quotes, and (2) propose a SOLUTION written as actionable',
+    'build instructions a developer or AI coding agent can follow, ending with a concrete',
+    '## Acceptance Criteria checklist (at least one "- [ ]" item).',
+    '',
+    'Focus ONLY on these fields — everything else (id, schema_version, created_at, updated_at,',
+    'status, theme, proof_of_pain counts + sample_complaints, builder) is filled in automatically,',
+    'so omit or leave them as placeholders:',
+    '  title, persona {role, org_size, stack_context}, why_now (list), build_suggestion {summary,',
+    '  key_capabilities (list), tech_constraints {language, runtime}}, signal_strength.explanation,',
+    '  and the Markdown body (## Problem Summary, ## Proposed Tool, ## Acceptance Criteria).',
+    '',
+    'You MUST return ONLY the file content — no preamble, no code fences, no commentary. The file',
+    'is a YAML front-matter block (delimited by ---) followed by the Markdown sections.',
   ].join('\n');
 }
 
-export function buildUserPrompt(cluster, config, schemaTemplate, errorMsg) {
-  const subreddits = [...new Set(cluster.posts.map((p) => p.subreddit))].join(', ');
-  const complaints = cluster.posts
+export function buildUserPrompt(group, config, schemaTemplate, errorMsg) {
+  const subject = config.subject ?? group.name;
+  const subreddits = [...new Set(group.posts.map((p) => p.subreddit))].filter(Boolean).join(', ');
+  const feedback = group.posts
     .map((p) => `- (paraphrase, strip usernames/PII) ${String(p.body ?? '').slice(0, 400)}`)
     .join('\n');
   const retry = errorMsg ? `\n\nYour previous output FAILED validation:\n${errorMsg}\nFix every issue and return only the corrected file.\n` : '';
   return [
+    `Subject (what the feedback is about): ${subject}`,
     `Theme: ${config.theme}`,
-    `Cluster: ${cluster.name}   Unique authors: ${cluster.uniqueAuthors}   Subreddits: ${subreddits}`,
-    `Complaint count: ${cluster.posts.length}`,
-    `Complaints:\n${complaints}`,
+    `Unique authors: ${group.uniqueAuthors}   Subreddits: ${subreddits}   Feedback count: ${group.posts.length}`,
+    `User feedback:\n${feedback}`,
     `\nSchema (reproduce this structure EXACTLY, filling all fields; status must be "inbox"; all builder.* must be null):\n${schemaTemplate}`,
     retry,
   ].join('\n');
-}
-
-/** @param {object} config @param {NodeJS.ProcessEnv} [env] */
-export function resolveModelId(config, env = process.env) {
-  return env.BEDROCK_MODEL_ID || config.bedrock_model_id || DEFAULT_BEDROCK_MODEL_ID;
-}
-
-export function buildBedrockBody(systemPrompt, userPrompt) {
-  return {
-    anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4096,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-  };
-}
-
-/**
- * @param {string} systemPrompt
- * @param {string} userPrompt
- * @param {{config?:object, region?:string, modelId?:string, send?:Function}} [deps]
- */
-export async function callBedrock(systemPrompt, userPrompt, { config = {}, region = process.env.AWS_REGION, modelId, send } = {}) {
-  const body = buildBedrockBody(systemPrompt, userPrompt);
-  const command = new InvokeModelCommand({
-    modelId: modelId ?? resolveModelId(config),
-    contentType: 'application/json',
-    accept: 'application/json',
-    body: JSON.stringify(body),
-  });
-
-  const dispatch = send ?? ((cmd) => new BedrockRuntimeClient({ region }).send(cmd));
-  const res = await dispatch(command);
-  const parsed = JSON.parse(new TextDecoder().decode(res.body));
-  return parsed.content?.[0]?.text ?? '';
 }
 
 // ---- validation ----
@@ -135,12 +119,67 @@ export function validateCard(text, themes) {
   return { valid: errors.length === 0, errors };
 }
 
+// ---- system-managed fields ----
+
+const NULL_BUILDER = { session_id: null, repo_url: null, pr_url: null, box_task_id: null, phase: null, last_run_at: null, tests_pass: null, build_pass: null };
+
+/** Build sample_complaints straight from the scraped posts (real quotes/urls beat model guesses). */
+function complaintsFromPosts(posts = [], scrapedAt) {
+  return posts
+    .map((p) => ({
+      text: String(p.body ?? '').replace(/\s+/g, ' ').trim().slice(0, 300),
+      source_url: /^https?:\/\//.test(p.permalink ?? '') ? p.permalink : `https://www.reddit.com${p.permalink ?? ''}`,
+      reddit_score: Number.isFinite(p.score) ? p.score : (Number.isFinite(p.reddit_score) ? p.reddit_score : 0),
+      scraped_at: scrapedAt,
+    }))
+    .filter((c) => c.text.length > 0)
+    .slice(0, 5);
+}
+
+/**
+ * Overwrite the fields the Idea Miner / Orchestrator own (so the model can't get them wrong) and
+ * fill evidence we already know from the scrape. The model keeps ownership of the semantic fields.
+ * @param {string} text raw LLM output
+ * @param {{theme:string, uniqueAuthors:number, subredditCount:number, timeframeDays:number, posts:object[]}} facts
+ */
+export function applySystemFields(text, facts) {
+  const parsed = parseFrontMatter(text);
+  const fm = parsed?.fm && typeof parsed.fm === 'object' ? { ...parsed.fm } : {};
+  const body = parsed ? parsed.body : `\n${String(text ?? '')}`;
+  const now = new Date().toISOString();
+
+  fm.id = randomUUID();
+  fm.schema_version = '1';
+  fm.created_at = now;
+  fm.updated_at = now;
+  fm.status = 'inbox';
+  fm.theme = facts.theme;
+  fm.builder = { ...NULL_BUILDER };
+
+  const complaints = complaintsFromPosts(facts.posts, now);
+  fm.proof_of_pain = {
+    ...(fm.proof_of_pain && typeof fm.proof_of_pain === 'object' ? fm.proof_of_pain : {}),
+    unique_authors: Math.max(1, facts.uniqueAuthors || 1),
+    subreddit_count: Math.max(1, facts.subredditCount || 1),
+    timeframe_days: Math.max(1, facts.timeframeDays || 30),
+    sample_complaints: complaints.length > 0 ? complaints : (fm.proof_of_pain?.sample_complaints ?? []),
+  };
+
+  const score = fm.signal_strength?.score;
+  fm.signal_strength = {
+    ...(fm.signal_strength && typeof fm.signal_strength === 'object' ? fm.signal_strength : {}),
+    score: typeof score === 'number' && score >= 0 && score <= 1 ? score : 0.6,
+  };
+
+  return `---\n${yaml.dump(fm)}---\n${body}`;
+}
+
 // ---- failed card ----
 
 export function injectFailedStatus(rawText, errorMsg) {
   const fm = {
-    status: 'failed', schema_version: '1', error: String(errorMsg ?? 'validation failed'),
-    builder: { session_id: null, repo_url: null, pr_url: null, box_task_id: null, phase: null, last_run_at: null, tests_pass: null, build_pass: null },
+    status: 'failed', id: randomUUID(), schema_version: '1', error: String(errorMsg ?? 'validation failed'),
+    builder: { ...NULL_BUILDER },
   };
   return `---\n${yaml.dump(fm)}---\n\n# Failed Card\n\nThe LLM output did not validate after one retry.\n\n## Validation error\n${errorMsg ?? ''}\n\n## Raw LLM output\n${rawText ?? ''}\n`;
 }
@@ -148,21 +187,30 @@ export function injectFailedStatus(rawText, errorMsg) {
 // ---- orchestration ----
 
 /**
- * @param {object} cluster @param {object} config @param {{id:string}[]} themes
+ * @param {object} group  a feedback group { name, posts, uniqueAuthors, subredditCount }
+ * @param {object} config @param {{id:string}[]} themes
  * @param {{invokeModelImpl?:Function}} [deps]
  * @returns {Promise<string>} spec.md content (a valid card, or a Failed_Card)
  */
-export async function generate(cluster, config, themes, { invokeModelImpl } = {}) {
-  if (!process.env.AWS_REGION) {
-    throw new Error('AWS_REGION is required to generate cards via Amazon Bedrock (SPEC §13) — aborting, no API call made');
-  }
+export async function generate(group, config, themes, { invokeModelImpl } = {}) {
+  assertBedrockEnv();
   const schemaTemplate = fs.readFileSync(SCHEMA_PATH, 'utf8');
   const system = buildSystemPrompt();
   const callModel = invokeModelImpl ?? ((sys, user) => callBedrock(sys, user, { config }));
 
+  const facts = {
+    theme: config.theme,
+    uniqueAuthors: group.uniqueAuthors,
+    subredditCount: group.subredditCount,
+    timeframeDays: config.window_days,
+    posts: group.posts ?? [],
+  };
+
   const attempt = async (errorMsg) => {
     try {
-      const text = await callModel(system, buildUserPrompt(cluster, config, schemaTemplate, errorMsg));
+      const raw = await callModel(system, buildUserPrompt(group, config, schemaTemplate, errorMsg));
+      // Repair system/known fields before validating so the model only owns the semantic content.
+      const text = applySystemFields(raw, facts);
       const res = validateCard(text, themes);
       return { text, valid: res.valid, errors: res.errors };
     } catch (err) {

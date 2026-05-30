@@ -11,6 +11,12 @@
       "label": "Observability",
       "description": "Logging, tracing, metrics tooling gaps. Reserved for post-hackathon.",
       "active": false
+    },
+    {
+      "id": "product-feedback",
+      "label": "Product Feedback",
+      "description": "General user feedback about a company, product, or feature mined from Reddit.",
+      "active": true
     }
   ]
 }

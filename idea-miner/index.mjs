@@ -55,6 +55,8 @@ export async function runPipeline({ config, themes, boxClient, scrapeImpl = scra
 }
 
 async function main() {
+  // Auto-load repo-root .env so `node idea-miner/index.mjs` works without a shell wrapper (cross-platform).
+  try { process.loadEnvFile(path.join(REPO_ROOT, '.env')); } catch { /* no .env file — rely on the ambient environment */ }
   try {
     assertEnv(process.env);
     const { config, themes } = loadConfigs();

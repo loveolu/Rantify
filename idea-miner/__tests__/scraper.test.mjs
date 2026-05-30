@@ -68,6 +68,27 @@ test('timeFilter maps window_days to the actor\'s coarse time bucket', () => {
   assert.equal(buildApifyPayload({ ...config, window_days: 60 }).time, 'year');
 });
 
+test('buildApifyPayload prefers searchPhrases over static keywords', () => {
+  const p = buildApifyPayload({ searchPhrases: ['notion ai', 'notion calendar'], max_posts_per_run: 50 });
+  assert.deepEqual(p.searches, ['notion ai', 'notion calendar']);
+});
+
+test('buildApifyPayload scopes each search to a chosen subreddit (r/ stripped)', () => {
+  const p = buildApifyPayload({ searchPhrases: ['notion ai'], subreddit: 'r/productivity', max_posts_per_run: 50 });
+  assert.deepEqual(p.searches, ['notion ai subreddit:productivity']);
+});
+
+test('scrape post-filters results to the chosen subreddit (precision fix)', async () => {
+  process.env.APIFY_TOKEN = 'tkn';
+  const items = [
+    litePost({ id: 't3_a', parsedCommunityName: 'productivity' }),
+    litePost({ id: 't3_b', parsedCommunityName: 'Baking' }), // off-topic "flaky" pastry
+  ];
+  const out = await scrape({ searchPhrases: ['flaky'], subreddit: 'productivity', max_posts_per_run: 50 }, { fetchImpl: okFetch(items) });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].subreddit, 'productivity');
+});
+
 test('missing APIFY_TOKEN throws before any HTTP call (Req 1.7)', async () => {
   const prev = process.env.APIFY_TOKEN; delete process.env.APIFY_TOKEN;
   let called = false;

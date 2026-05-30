@@ -22,6 +22,7 @@
   --header-h: 56px;
   --sidebar-w: 240px;
   /* status tokens (legacy name kept for Landing) */
+  --st-mining: #38bdf8;
   --st-inbox: #94a3b8;
   --st-ready: #1f52ae;
   --st-building: #f59e0b;
@@ -220,12 +221,17 @@ h1.display, .display { font-size: 48px; font-weight: 700; letter-spacing: -0.03e
   text-transform: uppercase; letter-spacing: 0.03em;
 }
 
+.status-mining { background: var(--st-mining); color: #082f49; display: inline-flex; align-items: center; gap: 4px; }
 .status-inbox { background: var(--st-inbox); }
 .status-ready-for-build { background: var(--st-ready); }
 .status-building { background: var(--st-building); color: #78350f; }
 .status-building-approved { background: var(--st-approved); }
 .status-completed { background: var(--st-done); }
 .status-failed { background: var(--st-failed); }
+
+.card-mining { border-style: dashed; opacity: 0.95; cursor: default; }
+.card-mining-error { border-color: var(--st-failed); }
+.card-error { margin-top: 6px; font-size: 11px; color: var(--st-failed); line-height: 1.4; }
 
 .empty { font-size: 12px; color: var(--text-3); text-align: center; padding: 24px 0; }
 

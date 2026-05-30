@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
+import { createJobRegistry } from './mine-jobs.mjs';
 
 const JSON_HEADER = { 'Content-Type': 'application/json' };
 
-export function createApi({ box, tokenStore }) {
+/**
+ * @param {{box:object, tokenStore?:object,
+ *   mine?:(req:{query:string,subreddit?:string,creator_email?:string})=>Promise<{fileId:string,cardId:string}>,
+ *   jobs?:ReturnType<typeof createJobRegistry>}} deps
+ */
+export function createApi({ box, tokenStore, mine, jobs = createJobRegistry() }) {
   async function getCards(req, res) {
     const cards = await box.listCardsWithMetadata();
     const list = cards.map(({ fileId, cardId, metadata }) => ({
@@ -62,6 +68,29 @@ export function createApi({ box, tokenStore }) {
     json(res, 200, { ...meta, status });
   }
 
+  // Kick off a background mining job from a free-text request; return instantly.
+  async function startMine(req, res) {
+    if (typeof mine !== 'function') { json(res, 503, { error: 'mining is not configured on this server' }); return; }
+    const body = await readJson(req);
+    const query = String(body.query ?? '').trim();
+    if (!query) { json(res, 400, { error: 'missing query' }); return; }
+    const subreddit = body.subreddit ? String(body.subreddit).trim() : undefined;
+    const creator_email = body.creator_email ? String(body.creator_email).trim() : undefined;
+
+    const jobId = jobs.start({ query, subreddit, creatorEmail: creator_email });
+    // Fire-and-forget: the dashboard polls GET /api/mine for progress.
+    Promise.resolve()
+      .then(() => mine({ query, subreddit, creator_email }))
+      .then((ref) => jobs.complete(jobId, ref))
+      .catch((err) => jobs.fail(jobId, err));
+
+    json(res, 202, { jobId, status: 'mining' });
+  }
+
+  function listMine(req, res) {
+    json(res, 200, { jobs: jobs.list() });
+  }
+
   async function authStatus(req, res) {
     const connections = [];
     if (tokenStore) {
@@ -91,6 +120,10 @@ export function createApi({ box, tokenStore }) {
           if (parts.length === 3 && method === 'PUT') return await setStatus(req, res, parts[2]);
           if (parts.length === 4 && parts[3] === 'spec' && method === 'GET') return await getSpec(req, res, parts[2]);
           if (parts.length === 5 && parts[3] === 'artifacts' && method === 'GET') return await getArtifact(req, res, parts[2], parts[4]);
+        }
+        if (parts[1] === 'mine') {
+          if (parts.length === 2 && method === 'POST') return await startMine(req, res);
+          if (parts.length === 2 && method === 'GET') return listMine(req, res);
         }
         if (parts[1] === 'auth' && parts[2] === 'status' && method === 'GET') return await authStatus(req, res);
       }

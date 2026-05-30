@@ -1,5 +1,7 @@
 // Shared status vocabulary for the build pipeline.
+// 'mining' is a UI-only state (a feedback-mining job in flight); it is not a Box status.
 export const STATUSES = [
+  'mining',
   'inbox',
   'ready-for-build',
   'building',
@@ -9,6 +11,7 @@ export const STATUSES = [
 ];
 
 export const STATUS_LABEL = {
+  mining: 'Mining',
   inbox: 'Inbox',
   'ready-for-build': 'Ready',
   building: 'Building',
@@ -18,6 +21,7 @@ export const STATUS_LABEL = {
 };
 
 export const STATUS_COLOR = {
+  mining: 'var(--st-mining)',
   inbox: 'var(--st-inbox)',
   'ready-for-build': 'var(--st-ready)',
   building: 'var(--st-building)',

@@ -7,6 +7,20 @@ on **Amazon Bedrock**, and uploads it to Box as an `inbox` card. Implements SPEC
 scrape (Apify) → score → cluster → generate (Claude) → upload (Box)
 ```
 
+### Query-driven feedback mining (Rantify)
+
+`mine.mjs` exposes `mineFromQuery({ query, subreddit?, creatorEmail? }, deps)` — the user-facing
+flow behind the dashboard's `POST /api/mine`. Instead of fixed dev-pain clusters it takes a
+free-text subject (a company or feature) and an optional subreddit:
+
+```
+interpret (Bedrock) → scrape (Apify, subreddit-scoped) → score → group → generate (Bedrock) → upload (Box, inbox)
+```
+
+The interpreter expands the request into Reddit search phrases + a theme; the generator writes
+an implementation spec (problem + solution-as-instructions + acceptance criteria) under the
+`product-feedback` theme. The card lands in `Inbox/` and rides the same build loop.
+
 ## Run offline (no Apify / Bedrock / real Box)
 
 ```bash
@@ -35,11 +49,14 @@ Writes to the Box **mock** by default. To target real Box, swap the one import i
 
 | Module | Purpose | SPEC |
 |---|---|---|
-| `scorer.mjs` | `log1p` base + keyword boost; drop low-signal/stale | §6.3 |
+| `bedrock.mjs` | shared Amazon Bedrock (Claude) client; injectable `send` | §13 |
+| `interpreter.mjs` | free-text query → `{ subject, searchPhrases, theme, subreddit? }` via Bedrock | §6.1 |
+| `scorer.mjs` | `log1p` base + keyword boost (+ optional subject relevance); drop low-signal/stale | §6.3 |
 | `cluster.mjs` | keyword clusters (flaky-tests / slow-ci); threshold filter | §6.4 |
-| `scraper.mjs` | Apify Reddit scrape, dedup + cap (`fetch` injectable) | §6.2 |
+| `scraper.mjs` | Apify Reddit scrape, subreddit-scoped, dedup + cap (`fetch` injectable) | §6.2 |
 | `generator.mjs` | Bedrock Claude call + §5.2 schema validation, retry-once, Failed_Card | §6.5 |
 | `uploader.mjs` | de-dup → upload with 1s/2s/4s backoff → `failed-cards/` fallback | §6.6 |
+| `mine.mjs` | `mineFromQuery()` — query-driven interpret→scrape→score→group→generate→upload | §6 |
 | `index.mjs` | pipeline wiring, env/config validation, exit codes | §6 |
 
 ## Testing notes

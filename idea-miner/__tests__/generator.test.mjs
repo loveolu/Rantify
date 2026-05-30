@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
 import {
-  validateCard, generate, buildSystemPrompt, injectFailedStatus,
+  validateCard, generate, buildSystemPrompt, injectFailedStatus, applySystemFields,
   buildBedrockBody, resolveModelId, callBedrock, DEFAULT_BEDROCK_MODEL_ID,
 } from '../generator.mjs';
 
@@ -49,6 +49,55 @@ test('Property 12: generate output is inbox+null-builder (valid) or failed (garb
 
 test('system prompt forbids preamble / code fences (Req 4.2)', () => {
   assert.match(buildSystemPrompt(), /ONLY the file content|no preamble|no code fences/i);
+});
+
+// A "content-only" model output (no id/timestamps/status/theme/proof_of_pain/builder) must be
+// repaired into a valid, uploadable card — this is what prevents the "cardId=undefined → 400" crash.
+test('generate repairs a content-only card (no id/timestamps/builder) into a valid inbox card', async () => {
+  const contentOnly = `---
+title: "Spotify shuffle is not random enough"
+persona:
+  role: "music listener"
+  org_size: "consumer"
+  stack_context: "Spotify mobile + desktop"
+why_now:
+  - "Repeated complaints across threads this month"
+build_suggestion:
+  summary: "A true-shuffle toggle that guarantees no near-repeats."
+  key_capabilities:
+    - "Fisher-Yates shuffle with no-repeat window"
+  tech_constraints:
+    language: "TypeScript"
+    runtime: "Node 20"
+signal_strength:
+  explanation: "Many distinct users report the same frustration."
+---
+
+# Spotify shuffle is not random enough
+
+## Problem Summary
+Users feel shuffle repeats songs too often.
+
+## Acceptance Criteria
+- [ ] Shuffle never repeats a track within the last N plays.
+`;
+  const group = { name: 'Spotify shuffle', uniqueAuthors: 7, subredditCount: 2, posts: [
+    { author: 'u1', subreddit: 'spotify', permalink: '/r/spotify/comments/x', score: 42, body: 'shuffle keeps replaying the same 10 songs' },
+  ] };
+  const out = await generate(group, { theme: 'product-feedback', window_days: 90 }, [{ id: 'product-feedback' }], { invokeModelImpl: async () => contentOnly });
+  const result = validateCard(out, [{ id: 'product-feedback' }]);
+  assert.deepEqual(result, { valid: true, errors: [] });
+  const fm = frontMatter(out);
+  assert.match(fm.id, /^[0-9a-f-]{36}$/i);          // system-assigned UUID, not model-invented
+  assert.equal(fm.status, 'inbox');
+  assert.equal(fm.theme, 'product-feedback');
+  assert.equal(fm.proof_of_pain.unique_authors, 7); // injected from the scrape, not the model
+  assert.equal(fm.proof_of_pain.sample_complaints[0].reddit_score, 42);
+});
+
+test('applySystemFields always assigns a UUID id even for empty input (no more undefined card ids)', () => {
+  const out = applySystemFields('', { theme: 'product-feedback', uniqueAuthors: 1, subredditCount: 1, timeframeDays: 30, posts: [] });
+  assert.match(frontMatter(out).id, /^[0-9a-f-]{36}$/i);
 });
 
 test('buildBedrockBody uses the Bedrock Messages API shape', () => {
@@ -103,12 +152,14 @@ test('invalid on both attempts → Failed_Card with status failed (Req 4.6)', as
   assert.equal(frontMatter(out).status, 'failed');
 });
 
-test('missing AWS_REGION throws before any API call (Req 4.7)', async () => {
-  const prev = process.env.AWS_REGION; delete process.env.AWS_REGION;
+test('missing AWS_REGION/BEDROCK_REGION throws before any API call (Req 4.7)', async () => {
+  const prevAws = process.env.AWS_REGION; const prevBr = process.env.BEDROCK_REGION;
+  delete process.env.AWS_REGION; delete process.env.BEDROCK_REGION;
   let called = false;
   await assert.rejects(generate(cluster, config, themes, { invokeModelImpl: async () => { called = true; return ''; } }), /AWS_REGION/);
   assert.equal(called, false);
-  if (prev !== undefined) process.env.AWS_REGION = prev;
+  if (prevAws !== undefined) process.env.AWS_REGION = prevAws;
+  if (prevBr !== undefined) process.env.BEDROCK_REGION = prevBr;
 });
 
 test('transport error on attempt 1 → retry; transport error on attempt 2 → Failed_Card (Req 4.10)', async () => {
