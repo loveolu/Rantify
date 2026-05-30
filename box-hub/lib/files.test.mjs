@@ -13,6 +13,12 @@ test('uploadText creates a new file when the name is absent', async () => {
   assert.equal(id, 'file_1');
   assert.equal(body.attributes.name, 'spec.md');
   assert.equal(body.attributes.parent.id, '10');
+  // file MUST be a ByteStream (Readable) yielding Buffer chunks — a raw Buffer makes the SDK
+  // iterate it byte-by-byte ("list[0] must be Buffer/Uint8Array, received type number").
+  assert.ok(body.file instanceof Readable, 'file should be a Readable ByteStream');
+  const chunks = [];
+  for await (const c of body.file) { assert.ok(Buffer.isBuffer(c)); chunks.push(c); }
+  assert.equal(Buffer.concat(chunks).toString('utf8'), '# spec');
 });
 
 test('uploadText uploads a new VERSION when the name already exists', async () => {

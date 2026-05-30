@@ -6,7 +6,7 @@
 import { getBoxClient } from '../lib/auth.mjs';
 import { ensureFolderTree } from '../lib/folders.mjs';
 import { ROOT, FOLDERS } from '../lib/paths.mjs';
-import { needsWebhook } from './webhook-plan.mjs';
+import { needsWebhook, isPublicWebhookAddress } from './webhook-plan.mjs';
 
 const TRIGGERS = ['METADATA_INSTANCE.UPDATED', 'ITEM.MOVED'];
 
@@ -15,6 +15,13 @@ export async function registerWebhooks(client, env = process.env) {
   const host = env.ORCHESTRATOR_HOST;
   if (!host) throw new Error('ORCHESTRATOR_HOST is required to register webhooks (SPEC §13)');
   const address = `${host.replace(/\/$/, '')}/webhooks/box`;
+
+  // Box rejects non-public/HTTP targets (e.g. localhost) with 400. Skip rather than fail —
+  // the orchestrator poller detects changes when running locally without a public tunnel.
+  if (!isPublicWebhookAddress(address)) {
+    console.warn(`[box-hub] skipping webhook registration: ${address} is not a public HTTPS URL (local dev). The orchestrator poller will detect Box changes instead.`);
+    return { created: false, skipped: true, reason: 'non-public address' };
+  }
 
   const tree = await ensureFolderTree(client);
   const target = { id: tree[`${ROOT}/${FOLDERS.buildCards}`], type: 'folder' };

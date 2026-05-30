@@ -6,6 +6,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { RealBoxClient } from './box-client-real.mjs';
 
+/** Read a ByteStream (Readable) — or tolerate a Buffer/string — into a UTF-8 string. */
+async function readUpload(file) {
+  if (file == null) return '';
+  if (Buffer.isBuffer(file)) return file.toString('utf8');
+  if (typeof file === 'string') return file;
+  const chunks = [];
+  for await (const c of file) chunks.push(Buffer.from(c));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /** Minimal in-memory Box: folders, files, file-metadata, tasks, search. */
 function fakeBox() {
   let seq = 1;
@@ -25,8 +35,8 @@ function fakeBox() {
       updateFolderById: async (fid, body) => { folders.get(fid).parentId = body.parent.id; return { id: fid }; },
     },
     uploads: {
-      uploadFile: async ({ attributes, file }) => { const fid = id('file'); files.set(fid, { id: fid, name: attributes.name, parentId: attributes.parent.id, content: file.toString('utf8'), modified_at: new Date().toISOString() }); return { entries: [{ id: fid }] }; },
-      uploadFileVersion: async (fid, { file }) => { files.get(fid).content = file.toString('utf8'); return { entries: [{ id: fid }] }; },
+      uploadFile: async ({ attributes, file }) => { const fid = id('file'); files.set(fid, { id: fid, name: attributes.name, parentId: attributes.parent.id, content: await readUpload(file), modified_at: new Date().toISOString() }); return { entries: [{ id: fid }] }; },
+      uploadFileVersion: async (fid, { file }) => { files.get(fid).content = await readUpload(file); return { entries: [{ id: fid }] }; },
     },
     downloads: { downloadFile: async (fid) => Buffer.from(files.get(fid).content, 'utf8') },
     fileMetadata: {

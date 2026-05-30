@@ -10,7 +10,9 @@
 
 import { randomUUID } from 'node:crypto';
 
-const PRUNE_AFTER_MS = 2 * 60_000;
+// Retain finished jobs long enough that the dashboard can bridge the Box metadata-search
+// indexing lag (a just-mined inbox card is shown from the job until /api/cards lists it).
+const PRUNE_AFTER_MS = 10 * 60_000;
 
 export function createJobRegistry({ now = () => Date.now() } = {}) {
   /** @type {Map<string, {jobId:string, query:string, subreddit:string|null, creatorEmail:string|null, status:'mining'|'done'|'error', fileId?:string, cardId?:string, error?:string, startedAt:number, finishedAt?:number}>} */

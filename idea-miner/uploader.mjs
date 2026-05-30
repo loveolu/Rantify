@@ -52,10 +52,10 @@ function writeFailedCard(failedDir, cardId, specMarkdown) {
 /**
  * @param {string} specMarkdown
  * @param {{findDuplicate:Function, uploadCard:Function}} boxClient
- * @param {{sleep?:Function, failedDir?:string, dedupe?:boolean, extraMetadata?:object}} [deps]
+ * @param {{sleep?:Function, failedDir?:string, dedupe?:boolean, extraMetadata?:object, throwOnFailure?:boolean}} [deps]
  * @returns {Promise<{fileId:string,cardId:string}|'duplicate'|'failed'>}
  */
-export async function upload(specMarkdown, boxClient, { sleep = defaultSleep, failedDir = 'failed-cards', dedupe = true, extraMetadata = {} } = {}) {
+export async function upload(specMarkdown, boxClient, { sleep = defaultSleep, failedDir = 'failed-cards', dedupe = true, extraMetadata = {}, throwOnFailure = false } = {}) {
   const fm = extractFrontMatter(specMarkdown);
 
   // Theme-based de-dup suits the fixed-theme dev-pain flow; subject mining bypasses it
@@ -78,6 +78,9 @@ export async function upload(specMarkdown, boxClient, { sleep = defaultSleep, fa
   } catch (err) {
     console.error(`[idea-miner] upload exhausted retries for ${fm.id}: ${err.message}`);
     writeFailedCard(failedDir, fm.id, specMarkdown);
+    // Batch CLI absorbs the failure (keep processing other cards); the interactive mining flow
+    // re-throws so the real Box error reaches the job/dashboard instead of a silent "failed".
+    if (throwOnFailure) throw new Error(`Box upload failed for card ${fm.id}: ${err.message}`);
     return 'failed';
   }
 }

@@ -4,10 +4,14 @@
  *   1. check env  2. metadata template  3. folder layout  4. webhooks
  * Each step is idempotent, so this is safe to re-run. Needs Box CCG creds + ORCHESTRATOR_HOST.
  */
+import path from 'node:path';
 import { reportConfig } from '../box-hub/setup/print-config.mjs';
 import { createTemplate } from '../box-hub/setup/create-template.mjs';
 import { createFolders } from '../box-hub/setup/create-folders.mjs';
 import { registerWebhooks } from '../box-hub/setup/register-webhooks.mjs';
+
+// Auto-load repo-root .env so `npm run setup:phase0` works without a shell wrapper (cross-platform).
+try { process.loadEnvFile(path.join(import.meta.dirname, '..', '.env')); } catch { /* no .env file — rely on the ambient environment */ }
 
 async function main() {
   const missing = reportConfig().filter((r) => !r.present).map((r) => r.key);
@@ -23,7 +27,7 @@ async function main() {
 
   console.log('3/3 webhooks…');
   const w = await registerWebhooks();
-  console.log(`    ${w.created ? 'registered' : 'already present'}`);
+  console.log(`    ${w.skipped ? 'skipped (local/non-HTTPS host — poller will be used)' : w.created ? 'registered' : 'already present'}`);
 
   console.log('\n✅ Phase 0 provisioning complete.');
 }

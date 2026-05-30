@@ -35,7 +35,15 @@ export default function Dashboard() {
   for (const c of cards) (grouped[c.status] || (grouped[c.status] = [])).push(c);
   grouped.mining = miningCards;
 
-  const activeCount = cards.length + miningCards.length;
+  // A finished mine writes its card to Box immediately, but Box metadata search indexes it with
+  // a lag — so surface completed jobs as real (clickable) Inbox cards until /api/cards catches up.
+  const knownFileIds = new Set(cards.map((c) => c.fileId));
+  const freshInbox = jobs
+    .filter((j) => j.status === 'done' && j.fileId && !knownFileIds.has(j.fileId))
+    .map((j) => ({ fileId: j.fileId, theme: j.query, status: 'inbox', creator_email: j.creatorEmail, pain_score: null }));
+  grouped.inbox = [...freshInbox, ...grouped.inbox];
+
+  const activeCount = cards.length + freshInbox.length + miningCards.length;
 
   return (
     <div>

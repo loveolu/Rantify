@@ -93,8 +93,10 @@ export async function mineFromQuery(
   }
 
   // 6. Upload as an inbox card (no theme de-dup; carry the submitter's email through).
+  //    throwOnFailure: surface the real Box error to the job instead of a silent "failed".
   return uploadImpl(specMarkdown, boxClient, {
     dedupe: false,
+    throwOnFailure: true,
     extraMetadata: { creator_email: creatorEmail ?? null, box_task_id: null },
   });
 }

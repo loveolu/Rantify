@@ -14,3 +14,19 @@ export function needsWebhook(existing, { target, address, triggers }) {
     w.address === address &&
     sameTriggers(w.triggers, triggers));
 }
+
+/**
+ * Box only accepts public HTTPS webhook targets — localhost/private/http addresses are
+ * rejected with 400. Returns false for those so local-dev setup can skip registration
+ * (the orchestrator's poller covers change detection instead). Pure.
+ * @returns {boolean}
+ */
+export function isPublicWebhookAddress(address) {
+  let u;
+  try { u = new URL(address); } catch { return false; }
+  if (u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
+  if (['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host)) return false;
+  if (host.endsWith('.local')) return false;
+  return true;
+}

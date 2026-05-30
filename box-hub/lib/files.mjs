@@ -3,9 +3,16 @@
  * Maps to contract uploadCard(spec.md), uploadArtifact, getSpecMarkdown (SPEC.md §8.3).
  */
 
+import { Readable } from 'node:stream';
+
 async function findFile(client, parentId, name) {
   const items = await client.folders.getFolderItems(parentId);
   return (items.entries ?? []).find((e) => e.type === 'file' && e.name === name) ?? null;
+}
+
+/** box-typescript-sdk-gen expects `file` as a ByteStream (Readable), NOT a raw Buffer. */
+function toByteStream(content) {
+  return Readable.from(Buffer.from(content, 'utf8'));
 }
 
 /**
@@ -13,7 +20,7 @@ async function findFile(client, parentId, name) {
  * (so cards aren't duplicated on re-write). Returns the file id.
  */
 export async function uploadText(client, { parentId, name, content }) {
-  const file = Buffer.from(content, 'utf8');
+  const file = toByteStream(content);
   const existing = await findFile(client, parentId, name);
   if (existing) {
     const res = await client.uploads.uploadFileVersion(existing.id, { attributes: { name }, file });
