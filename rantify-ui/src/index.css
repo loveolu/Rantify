@@ -311,7 +311,6 @@ form button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
 .pipe-stage .pname { font-size: 13px; font-weight: 600; color: var(--text); text-align: center; }
 .pipe-stage .pmeta { font-size: 12px; color: var(--text-3); font-family: var(--mono); }
 .pipe-stage .spin { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
 .pipe-stage.active { background: var(--accent-light); border-radius: var(--radius); }
 
 /* ── Loading / error ── */
@@ -321,6 +320,18 @@ form button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
 
 @keyframes pulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
 .pulse { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 6px; animation: pulse 1.2s ease-in-out infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner { width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+.btn .spinner { width: 14px; height: 14px; border-width: 2px; margin: 0; }
+.btn-accent .spinner { border-color: rgba(255,255,255,0.3); border-top-color: #fff; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(248,250,252,0.85); backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+}
+.overlay .spinner { width: 32px; height: 32px; border-width: 3px; }
 
 /* ── Page head (Dashboard header) ── */
 
