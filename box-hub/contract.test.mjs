@@ -49,11 +49,16 @@ function fakeBox() {
       },
     },
     tasks: { createTask: async () => ({ id: id('task') }) },
+    // Mirror real Box: searchForContent wraps the template instance at
+    // metadata.extraData.<scope>.<template>.extraData and includes $-prefixed system fields.
     search: {
       searchForContent: async () => ({
         entries: [...files.values()].filter((f) => meta.has(f.id)).map((f) => ({
           id: f.id, type: 'file', modified_at: f.modified_at,
-          metadata: { enterprise: { devtool_build_card: meta.get(f.id) } },
+          metadata: { extraData: { enterprise: { devtool_build_card: { extraData: {
+            $parent: `file_${f.id}`, $template: 'devtool_build_card', $scope: 'enterprise_1',
+            ...meta.get(f.id),
+          } } } } },
         })),
       }),
     },

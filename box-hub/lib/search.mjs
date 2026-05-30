@@ -9,13 +9,35 @@ import { ROOT } from './paths.mjs';
 const SCOPE = 'enterprise';
 const TEMPLATE = 'devtool_build_card';
 
-const instanceOf = (entry) => entry?.metadata?.[SCOPE]?.[TEMPLATE] ?? null;
+// Box's `searchForContent` does NOT include metadata in the entry by default — and once
+// `fields` is set, standard fields stop being returned too. So explicitly request the
+// metadata template plus the standard fields callers read (id, modified_at, name).
+const FIELDS = ['id', 'name', 'modified_at', `metadata.${SCOPE}.${TEMPLATE}`];
+
+/**
+ * Extract the user-defined template fields from a Box file entry.
+ * Real Box wraps the payload at `metadata.extraData[scope][template].extraData` and
+ * mixes in $-prefixed system fields ($id, $type, $parent, $scope, $template, $version,
+ * $typeVersion, $canEdit). Strip those so callers see only their template fields.
+ * Returns null when the file has no template instance.
+ */
+function instanceOf(entry) {
+  const raw = entry?.metadata?.extraData?.[SCOPE]?.[TEMPLATE]?.extraData;
+  if (!raw || typeof raw !== 'object') return null;
+  const fields = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!k.startsWith('$')) fields[k] = v;
+  }
+  return Object.keys(fields).length ? fields : null;
+}
+
 const toRef = (entry) => ({ fileId: entry.id, cardId: instanceOf(entry).card_id });
 
 async function searchByTemplate(client, filters, rootFolderId = '0') {
   const res = await client.search.searchForContent({
     ancestorFolderIds: [rootFolderId],
     mdfilters: [{ scope: SCOPE, templateKey: TEMPLATE, filters }],
+    fields: FIELDS,
   });
   return (res.entries ?? []).filter((e) => instanceOf(e));
 }
@@ -44,6 +66,7 @@ export async function listCardsWithMetadata(client, rootFolderId) {
   const res = await client.search.searchForContent({
     ancestorFolderIds: [rootFolderId],
     mdfilters: [{ scope: SCOPE, templateKey: TEMPLATE, filters: [] }],
+    fields: FIELDS,
   });
   return (res.entries ?? [])
     .filter((e) => instanceOf(e))

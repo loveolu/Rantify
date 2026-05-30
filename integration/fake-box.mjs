@@ -3,6 +3,17 @@
  * by the integration tests. Not a production artifact; it stands in for the Box API so the
  * real RealBoxClient (Person B) can be driven offline.
  */
+/** Read an upload body to a string: real Box (and uploadText) pass a Readable ByteStream,
+ *  but a Buffer or plain string may also appear. Mirrors box-hub/lib/files.mjs#downloadText. */
+async function readUpload(file) {
+  if (file == null) return '';
+  if (typeof file === 'string') return file;
+  if (Buffer.isBuffer(file)) return file.toString('utf8');
+  const chunks = [];
+  for await (const chunk of file) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 export function fakeBox() {
   let seq = 1; const id = (p) => `${p}_${seq++}`;
   const folders = new Map([['0', { id: '0', name: 'root', parentId: null }]]);
@@ -18,8 +29,8 @@ export function fakeBox() {
       updateFolderById: async (fid, b) => { folders.get(fid).parentId = b.parent.id; return { id: fid }; },
     },
     uploads: {
-      uploadFile: async ({ attributes, file }) => { const fid = id('file'); files.set(fid, { id: fid, name: attributes.name, parentId: attributes.parent.id, content: file.toString('utf8'), modified_at: new Date().toISOString() }); return { entries: [{ id: fid }] }; },
-      uploadFileVersion: async (fid, { file }) => { files.get(fid).content = file.toString('utf8'); return { entries: [{ id: fid }] }; },
+      uploadFile: async ({ attributes, file }) => { const fid = id('file'); files.set(fid, { id: fid, name: attributes.name, parentId: attributes.parent.id, content: await readUpload(file), modified_at: new Date().toISOString() }); return { entries: [{ id: fid }] }; },
+      uploadFileVersion: async (fid, { file }) => { files.get(fid).content = await readUpload(file); return { entries: [{ id: fid }] }; },
     },
     downloads: { downloadFile: async (fid) => Buffer.from(files.get(fid).content, 'utf8') },
     fileMetadata: {
@@ -28,6 +39,8 @@ export function fakeBox() {
       updateFileMetadataById: async (fid, _s, _t, ops) => { const m = meta.get(fid) ?? {}; for (const o of ops) { const k = o.path.slice(1); if (o.op === 'remove') delete m[k]; else m[k] = o.value; } meta.set(fid, m); },
     },
     tasks: { createTask: async () => ({ id: id('task') }) },
-    search: { searchForContent: async () => ({ entries: [...files.values()].filter((f) => meta.has(f.id)).map((f) => ({ id: f.id, type: 'file', modified_at: f.modified_at, metadata: { enterprise: { devtool_build_card: meta.get(f.id) } } })) }) },
+    // Mirror real Box: searchForContent wraps the template instance at
+    // metadata.extraData.<scope>.<template>.extraData and includes $-prefixed system fields.
+    search: { searchForContent: async () => ({ entries: [...files.values()].filter((f) => meta.has(f.id)).map((f) => ({ id: f.id, type: 'file', modified_at: f.modified_at, metadata: { extraData: { enterprise: { devtool_build_card: { extraData: { $parent: `file_${f.id}`, $template: 'devtool_build_card', $scope: 'enterprise_1', ...meta.get(f.id) } } } } } })) }) },
   };
 }
